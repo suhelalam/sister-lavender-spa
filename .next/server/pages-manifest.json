@@ -2,10 +2,5 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/services": "pages/services.js",
-  "/services/scalp-treatments": "pages/services/scalp-treatments.js",
-  "/": "pages/index.js",
-  "/location": "pages/location.js",
-  "/our-policy": "pages/our-policy.js",
-  "/gift-card": "pages/gift-card.js"
+  "/": "pages/index.js"
 }
