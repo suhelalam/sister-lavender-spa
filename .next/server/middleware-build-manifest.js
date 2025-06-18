@@ -43,6 +43,11 @@ self.__BUILD_MANIFEST = {
       "static/chunks/webpack.js",
       "static/chunks/main.js",
       "static/chunks/pages/services.js"
+    ],
+    "/services/scalp-treatments": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/services/scalp-treatments.js"
     ]
   },
   "ampFirstPages": []

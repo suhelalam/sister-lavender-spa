@@ -1,8 +1,22 @@
 import Link from 'next/link';
+import Head from 'next/head';
 
 export default function Home() {
   return (
+    <>
+    <Head>
+        <title>Sister Lavender Spa</title>
+        <link rel="icon" href="/logo.png" />
+        {/* You can also add more favicon sizes if you want */}
+      </Head>
     <div className="min-h-screen flex flex-col items-center justify-center text-center p-6 bg-purple-50">
+      {/* Logo */}
+      <img
+        src="/logo.png"
+        alt="Sister Lavender Spa Logo"
+        className="mb-6 w-32 h-auto"
+      />
+      
       <h1 className="text-5xl font-bold mb-4 text-purple-700">
         Welcome to Sister Lavender Spa
       </h1>
@@ -73,5 +87,7 @@ export default function Home() {
         </section>
       </div>
     </div>
+    </>
+    
   );
 }
