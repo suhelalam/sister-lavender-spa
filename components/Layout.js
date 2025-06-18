@@ -106,7 +106,7 @@ export default function Layout({ children }) {
               </Link>
             ))}
             <Link
-              href="/booking"
+              href="https://sister-lavender-spa.square.site/"
               onClick={() => setMenuOpen(false)}
               className="block mt-2 bg-purple-600 text-white px-4 py-2 rounded-full text-center"
             >

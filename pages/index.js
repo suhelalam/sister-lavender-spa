@@ -21,7 +21,7 @@ export default function Home() {
     <>
       <Head>
         <title>Sister Lavender Spa</title>
-        <link rel="icon" href="/logo.png" />
+        <link rel="icon" href="/favicon-96x96.png" />
       </Head>
 
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-6 bg-purple-50">
