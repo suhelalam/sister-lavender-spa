@@ -12,7 +12,7 @@ export default function Services() {
       title: 'Body Massage',
       image: '/images/massage.jpg',
       description: 'Relax and unwind with full-body massages.',
-      link: '/services/body-massage',
+      link: 'https://book.squareup.com/appointments/j4q0m67y9h6d3v/location/LG5CMWVE9WNJ7/services/7LITIMLSAURD3BYD7TPFVEXC',
     },
     {
       title: 'Foot Care',
