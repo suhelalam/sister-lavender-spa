@@ -7,13 +7,13 @@ export default function Home() {
       id: 1,
       title: '🌸 New Customer Offer',
       date: 'June 20, 2025',
-      description: 'Enjoy 20% off all massages booked this month.',
+      description: 'Enjoy 20% off all services booked this month during our soft opening.',
     },
     {
       id: 2,
-      title: '✨ New Head Spa Treatment',
+      title: '✨ Self-Care if Better Together',
       date: 'June 10, 2025',
-      description: 'Try our new revitalizing head spa with essential oils.',
+      description: 'Bring in a friend or loved one and enjoy 25% off for both.',
     },
   ];
 

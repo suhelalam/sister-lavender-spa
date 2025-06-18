@@ -19,8 +19,6 @@ export default function OurPolicy() {
 
         <li><strong>Body Massage:</strong> Our massages are therapeutic and professional. Improper behavior or requests will result in immediate termination of service.</li>
 
-        <li><strong>Nail Services:</strong> We do not remove acrylics or hard gels not applied at our spa. Please inform us in advance if removal is needed. Damaged natural nails may require special treatment.</li>
-
         <li><strong>Pedicures:</strong> We recommend wearing open-toed footwear to allow polish to dry completely. Please inform your technician of any foot conditions beforehand.</li>
 
         <li><strong>Gratuities:</strong> Tips are greatly appreciated and can be given in cash or added to your total at checkout.</li>
