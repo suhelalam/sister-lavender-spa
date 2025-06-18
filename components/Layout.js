@@ -32,12 +32,15 @@ export default function Layout({ children }) {
                 key={href}
                 href={href}
                 className={`hover:text-purple-600 transition font-medium ${
-                  pathname.startsWith(href) ? 'text-purple-600 underline underline-offset-4' : ''
+                  (href === '/' ? pathname === '/' : pathname.startsWith(href))
+                    ? 'text-purple-600 underline underline-offset-4'
+                    : ''
                 }`}
               >
                 {label}
               </Link>
             ))}
+
           </nav>
 
           {/* Desktop Book Now + Cart */}

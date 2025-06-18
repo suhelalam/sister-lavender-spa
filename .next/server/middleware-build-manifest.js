@@ -24,6 +24,21 @@ self.__BUILD_MANIFEST = {
       "static/chunks/main.js",
       "static/chunks/pages/_error.js"
     ],
+    "/gift-card": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/gift-card.js"
+    ],
+    "/location": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/location.js"
+    ],
+    "/our-policy": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/our-policy.js"
+    ],
     "/services": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",

@@ -3,5 +3,9 @@
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
   "/": "pages/index.js",
-  "/services": "pages/services.js"
+  "/gift-card": "pages/gift-card.js",
+  "/services": "pages/services.js",
+  "/booking": "pages/booking.js",
+  "/location": "pages/location.js",
+  "/our-policy": "pages/our-policy.js"
 }
