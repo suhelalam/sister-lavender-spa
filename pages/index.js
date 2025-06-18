@@ -69,7 +69,7 @@ export default function Home() {
           <p className="text-gray-700">
             Conveniently located in a peaceful corner of town, our spa is a serene escape from your daily routine.
           </p>
-          <p className="text-sm text-gray-500 mt-1">123 Spa Street, Tranquility City, CA</p>
+          <p className="text-sm text-gray-500 mt-1">2706 W Chicago Ave, Chicago, IL 60622</p>
         </section>
       </div>
     </div>

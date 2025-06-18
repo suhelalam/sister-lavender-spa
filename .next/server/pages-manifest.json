@@ -5,7 +5,6 @@
   "/": "pages/index.js",
   "/gift-card": "pages/gift-card.js",
   "/services": "pages/services.js",
-  "/booking": "pages/booking.js",
-  "/location": "pages/location.js",
-  "/our-policy": "pages/our-policy.js"
+  "/our-policy": "pages/our-policy.js",
+  "/location": "pages/location.js"
 }

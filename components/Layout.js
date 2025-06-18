@@ -174,14 +174,21 @@ export default function Layout({ children }) {
         <div className="max-w-5xl mx-auto grid gap-8 md:grid-cols-3">
           <div>
             <h4 className="font-semibold text-lg mb-2">Contact</h4>
-            <p>Email: info@sisterlavenderspa.com</p>
-            <p>Phone: (555) 123-4567</p>
+            <p>Email: selena@sisterlavenderspa.com</p>
+            <p>Phone: (312) 900-3131</p>
           </div>
           <div>
             <h4 className="font-semibold text-lg mb-2">Business Hours</h4>
-            <p>Mon–Fri: 10 AM – 7 PM</p>
-            <p>Sat–Sun: 11 AM – 6 PM</p>
+            <p className="flex">
+              <span className="w-20 font-semibold">Mon–Sat:</span>
+              <span>9:30 AM – 8 PM</span>
+            </p>
+            <p className="flex">
+              <span className="w-20 font-semibold">Sun:</span>
+              <span>9:30 AM – 6 PM</span>
+            </p>
           </div>
+
           <div>
             <h4 className="font-semibold text-lg mb-2">Follow Us</h4>
             <p>
@@ -194,16 +201,16 @@ export default function Layout({ children }) {
                 Instagram
               </a>
               <br />
-              <a
+              {/* <a
                 href="https://facebook.com"
                 className="text-purple-700 hover:underline"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 Facebook
-              </a>
+              </a> */}
             </p>
-            <p className="mt-2">123 Lavender Lane, Blissville, CA</p>
+            <p className="mt-2">2706 W Chicago Ave, Chicago, Ave, IL 60622</p>
           </div>
         </div>
         <p className="text-center mt-8 text-xs">&copy; {new Date().getFullYear()} Sister Lavender Spa. All rights reserved.</p>
