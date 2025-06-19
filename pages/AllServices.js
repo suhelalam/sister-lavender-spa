@@ -6,21 +6,35 @@ export default function AllServices() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    async function fetchServices() {
+useEffect(() => {
+  async function fetchServices() {
+    try {
+      const res = await fetch('/api/test-client');
+      const rawText = await res.text(); // Get raw response text
+      console.log("Raw API response:", rawText);
+
+      let data;
       try {
-        const res = await fetch('/api/services');
-        if (!res.ok) throw new Error('Failed to fetch services');
-        const data = await res.json();
-        setServices(data);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
+        data = JSON.parse(rawText); // Manually parse JSON
+      } catch (parseError) {
+        console.error("JSON parse error:", parseError);
+        throw new Error("Invalid JSON response");
       }
+
+      if (data.success) {
+        setServices(data.data);
+      } else {
+        throw new Error(data.error || "API request failed");
+      }
+    } catch (err) {
+      console.error("Fetch error:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-    fetchServices();
-  }, []);
+  }
+  fetchServices();
+}, []);
 
   if (loading)
     return (
@@ -31,15 +45,22 @@ export default function AllServices() {
 
   if (error) return <p className="text-red-500">Error: {error}</p>;
 
+  // Log before rendering
+  console.log('Rendering services:', services);
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">Our Services</h1>
       <ul className="space-y-4">
-        {services.map(({ id, name, description, price }) => (
+        {services.map(({ id, name, description, variations }) => (
           <li key={id} className="border p-4 rounded shadow-sm">
             <h2 className="text-xl font-semibold">{name}</h2>
-            <p className="text-gray-600">{description}</p>
-            <p className="mt-2 font-semibold">${price?.toFixed(2) || 'N/A'}</p>
+            <p className="text-gray-600 whitespace-pre-line">{description}</p>
+            <p className="mt-2 font-semibold">
+              {variations?.[0]
+                ? `$${(variations[0].price / 100).toFixed(2)} ${variations[0].currency}`
+                : 'Price N/A'}
+            </p>
           </li>
         ))}
       </ul>

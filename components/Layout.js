@@ -46,7 +46,7 @@ export default function Layout({ children }) {
           {/* Desktop Book Now + Cart */}
           <div className="hidden md:flex items-center space-x-4">
             <Link
-              href="https://sister-lavender-spa.square.site/"
+              href="/AllServices"
               className="bg-purple-600 text-white px-4 py-2 rounded-full font-medium hover:bg-purple-700"
             >
               Book Now

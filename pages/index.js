@@ -11,7 +11,7 @@ export default function Home() {
     },
     {
       id: 2,
-      title: '✨ Self-Care if Better Together',
+      title: '✨ Self-Care is Better Together',
       date: 'June 10, 2025',
       description: 'Bring in a friend or loved one and enjoy 25% off for both.',
     },
