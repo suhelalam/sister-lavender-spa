@@ -5,16 +5,16 @@ import Image from 'next/image';
 export default function Services() {
   const serviceCategories = [
     {
-      title: 'Head Spa Treatments',
+      title: '💆‍♀️ Head Spa Treatments',
       image: '/images/head.jpg',
       description: 'Revitalize your scalp with nourishing treatments.',
-      link: '/services/scalp-treatments',
+      link: '/services/head-spa',
     },
     {
-      title: 'Head & Body Harmony Rituals',
+      title: '🧘‍♀️ Head & Body Harmony Rituals',
       image: '/images/massage.jpg',
       description: 'Relax and unwind with full-body massages.',
-      link: '/services/body-massage',
+      link: '/services/body-harmony',
     },
     {
       title: 'Body Massage Treatments',
@@ -26,20 +26,20 @@ export default function Services() {
       title: 'Foot care',
       image: '/images/foot.jpg',
       description: 'Revitalize tired feet with expert callus removal and deep moisturizing treatments for softness and comfort.',
-      link: '/services/body-massage',
+      link: '/services/foot-care',
     },
     {
       title: 'Manicure Services',
       image: '/images/manicure.jpg',
       description: 'Enjoy beautifully shaped and polished nails with nourishing care for healthy, elegant hands.',
-      link: '/services/body-massage',
+      link: '/services/manicure',
     },
-    {
-      title: 'Facial',
-      image: '/images/facial.jpg',
-      description: 'Rejuvenate your skin with gentle cleansing, nourishing masks, and expert pampering for a radiant glow.',
-      link: '/services/body-massage',
-    },
+    // {
+    //   title: 'Facial',
+    //   image: '/images/facial.jpg',
+    //   description: 'Rejuvenate your skin with gentle cleansing, nourishing masks, and expert pampering for a radiant glow.',
+    //   link: '/services/body-massage',
+    // },
   ];
 
   return (

@@ -2,20 +2,16 @@ import Link from 'next/link';
 import Head from 'next/head';
 import { ServicesProvider, useServices } from '../context/ServicesContext';
 import ServiceCard from '../components/ServiceCard';
+import { getInitialServices } from '../lib/fetchServices';
 
 export async function getServerSideProps() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/services`);
-  const json = await res.json();
-
-  return {
-    props: {
-      initialServices: json.success ? json.data : [],
-    },
-  };
+  const initialServices = await getInitialServices();
+  return {props: {initialServices}};
 }
 
 function HomeContent() {
   const { services } = useServices();
+  console.log('Services in context:', services);
 
   const featuredServices = services.slice(0, 4); // or however you want
   const announcements = [
@@ -84,13 +80,6 @@ function HomeContent() {
                 <ServiceCard key={service._id} service={service} />
               ))}
             </div>
-
-            <Link
-              href="/AllServices"
-              className="text-purple-600 underline hover:text-purple-800 inline-block mt-4"
-            >
-              View All Services →
-            </Link>
           </section>
 
           <section>
@@ -115,10 +104,11 @@ function HomeContent() {
   );
 }
 
-export default function Home({ initialServices }) {
+export default function Home({initialServices}) {
   return (
     <ServicesProvider initialServices={initialServices}>
       <HomeContent />
     </ServicesProvider>
+    
   );
 }

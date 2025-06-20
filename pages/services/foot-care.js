@@ -11,15 +11,14 @@ export async function getServerSideProps() {
 }
 
 
-
-function BodyMassagePage() {
+function FootCarePage() {
   const { services } = useServices();
-  const filtered = services.filter(service => service.category_id === CATEGORY_IDS.BODY_MASSAGE_CATEGORY_ID);
+  const filtered = services.filter(service => service.category_id === CATEGORY_IDS.FOOT_CARE_CATEGORY_ID);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
       <h1 className="text-3xl sm:text-4xl font-bold mb-6 text-purple-700">
-        Body Massage Treatments
+        Foot Care
       </h1>
       {filtered.length === 0 ? (
         <p className="text-gray-600">No services found in this category.</p>
@@ -34,11 +33,10 @@ function BodyMassagePage() {
   );
 }
 
-export default function BodyMassage({ initialServices }) {
+export default function FootCare({ initialServices }) {
   return (
     <ServicesProvider initialServices={initialServices}>
-      <BodyMassagePage/>
+      <FootCarePage/>
     </ServicesProvider>
-  )
-
+  );
 }
