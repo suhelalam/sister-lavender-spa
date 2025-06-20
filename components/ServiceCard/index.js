@@ -3,6 +3,16 @@
 import { useCart } from '../../context/CartContext';
 import { useState } from 'react';
 
+
+function formatDuration(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+
+  if (h && m) return `${h}h ${m}min`;
+  if (h) return `${h}h`;
+  return `${m}min`;
+}
+
 export default function ServiceCard({ service }) {
   const { addItem } = useCart();
 
@@ -25,9 +35,9 @@ export default function ServiceCard({ service }) {
     <div className="border p-4 rounded shadow-sm flex flex-col h-full">
       <h2 className="text-xl font-semibold">{service?.name}</h2>
 
-      {typeof selectedVariation?.duration === 'number' && (
+      {selectedVariation?.duration > 0 && (
         <p className="text-sm font-medium text-gray-700 mt-1">
-          Duration: {Math.round(selectedVariation.duration / 60000)} minutes
+          Duration: {formatDuration(selectedVariation.duration / 60000)}
         </p>
       )}
 
