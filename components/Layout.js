@@ -1,9 +1,48 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Menu, X, ShoppingCart } from 'lucide-react';
 import { useCart } from '../context/CartContext'; // adjust path if needed
+
+// Client-only cart button to prevent hydration mismatch on badge
+function ClientOnlyCartButton({ totalItems, onClick }) {
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  return (
+    <button onClick={onClick} aria-label="Toggle cart" className="relative">
+      <ShoppingCart size={28} />
+      {hasMounted && totalItems > 0 && (
+        <span className="absolute -top-2 -right-2 bg-purple-600 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center">
+          {totalItems}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// Client-only checkout button to avoid hydration errors for checkout link
+function ClientOnlyCheckoutButton({ items, onClick }) {
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => setHasMounted(true), []);
+  if (!hasMounted) return null;
+
+  return (
+    <Link
+      href="/checkout"
+      onClick={onClick}
+      className={`bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 ${
+        items.length === 0 ? 'opacity-50 pointer-events-none' : ''
+      }`}
+    >
+      Checkout
+    </Link>
+  );
+}
 
 export default function Layout({ children }) {
   const pathname = usePathname();
@@ -40,7 +79,6 @@ export default function Layout({ children }) {
                 {label}
               </Link>
             ))}
-
           </nav>
 
           {/* Desktop Book Now + Cart */}
@@ -53,35 +91,19 @@ export default function Layout({ children }) {
             </Link>
 
             {/* Cart Icon */}
-            <button
+            <ClientOnlyCartButton
+              totalItems={totalItems}
               onClick={() => setCartOpen(!cartOpen)}
-              aria-label="Toggle cart"
-              className="relative"
-            >
-              <ShoppingCart size={28} />
-              {totalItems > 0 && (
-                <span className="absolute -top-2 -right-2 bg-purple-600 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center">
-                  {totalItems}
-                </span>
-              )}
-            </button>
+            />
           </div>
 
           {/* Mobile cart + menu */}
           <div className="md:hidden flex items-center space-x-4">
             {/* Cart Icon */}
-            <button
+            <ClientOnlyCartButton
+              totalItems={totalItems}
               onClick={() => setCartOpen(!cartOpen)}
-              aria-label="Toggle cart"
-              className="relative"
-            >
-              <ShoppingCart size={28} />
-              {totalItems > 0 && (
-                <span className="absolute -top-2 -right-2 bg-purple-600 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center">
-                  {totalItems}
-                </span>
-              )}
-            </button>
+            />
 
             {/* Mobile menu toggle */}
             <button onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu">
@@ -106,7 +128,7 @@ export default function Layout({ children }) {
               </Link>
             ))}
             <Link
-              href="https://sister-lavender-spa.square.site/"
+              href="/AllServices"
               onClick={() => setMenuOpen(false)}
               className="block mt-2 bg-purple-600 text-white px-4 py-2 rounded-full text-center"
             >
@@ -154,15 +176,9 @@ export default function Layout({ children }) {
               >
                 Clear Cart
               </button>
-              <Link
-                href="/booking"
-                onClick={() => setCartOpen(false)}
-                className={`bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 ${
-                  items.length === 0 ? 'opacity-50 pointer-events-none' : ''
-                }`}
-              >
-                Checkout
-              </Link>
+
+              {/* Client-only checkout button */}
+              <ClientOnlyCheckoutButton items={items} onClick={() => setCartOpen(false)} />
             </div>
           </div>
         )}
@@ -201,14 +217,6 @@ export default function Layout({ children }) {
                 Instagram
               </a>
               <br />
-              {/* <a
-                href="https://facebook.com"
-                className="text-purple-700 hover:underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Facebook
-              </a> */}
             </p>
             <p className="mt-2">2706 W Chicago Ave, Chicago, Ave, IL 60622</p>
           </div>

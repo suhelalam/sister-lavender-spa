@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import ServiceCard from '../components/ServiceCard';
 
 export default function AllServices() {
   const [services, setServices] = useState([]);
@@ -9,7 +10,7 @@ export default function AllServices() {
 useEffect(() => {
   async function fetchServices() {
     try {
-      const res = await fetch('/api/test-client');
+      const res = await fetch('/api/services');
       const rawText = await res.text(); // Get raw response text
       console.log("Raw API response:", rawText);
 
@@ -46,24 +47,14 @@ useEffect(() => {
   if (error) return <p className="text-red-500">Error: {error}</p>;
 
   // Log before rendering
-  console.log('Rendering services:', services);
+  // console.log('Rendering services:', services);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Our Services</h1>
-      <ul className="space-y-4">
-        {services.map(({ id, name, description, variations }) => (
-          <li key={id} className="border p-4 rounded shadow-sm">
-            <h2 className="text-xl font-semibold">{name}</h2>
-            <p className="text-gray-600 whitespace-pre-line">{description}</p>
-            <p className="mt-2 font-semibold">
-              {variations?.[0]
-                ? `$${(variations[0].price / 100).toFixed(2)} ${variations[0].currency}`
-                : 'Price N/A'}
-            </p>
-          </li>
-        ))}
-      </ul>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      {services.map((service) => (
+        <ServiceCard key={service.id} service={service} />
+      ))}
     </div>
+
   );
 }

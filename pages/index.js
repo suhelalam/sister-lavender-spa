@@ -1,7 +1,23 @@
 import Link from 'next/link';
 import Head from 'next/head';
+import { ServicesProvider, useServices } from '../context/ServicesContext';
+import ServiceCard from '../components/ServiceCard';
 
-export default function Home() {
+export async function getServerSideProps() {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/services`);
+  const json = await res.json();
+
+  return {
+    props: {
+      initialServices: json.success ? json.data : [],
+    },
+  };
+}
+
+function HomeContent() {
+  const { services } = useServices();
+
+  const featuredServices = services.slice(0, 3); // or however you want
   const announcements = [
     {
       id: 1,
@@ -36,36 +52,18 @@ export default function Home() {
           Welcome to Sister Lavender Spa
         </h1>
         <p className="text-lg text-gray-700 mb-6 max-w-xl">
-          A peaceful sanctuary where beauty meets wellness. We offer expert care through head spa, scalp therapy, massages, nails, and more.
+          A peaceful sanctuary where beauty meets wellness...
         </p>
 
         <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0 mb-8">
-          <Link
-            href="/booking"
-            className="px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition"
-          >
-            Book Appointment
-          </Link>
-          <Link
-            href="/service-agreement"
-            className="px-6 py-3 border border-purple-600 text-purple-600 rounded hover:bg-purple-100 transition"
-          >
-            Service Agreement
-          </Link>
-          <Link
-            href="/gift-card"
-            className="px-6 py-3 border border-yellow-500 text-yellow-700 rounded hover:bg-yellow-100 transition"
-          >
-            Buy Gift Card
-          </Link>
+          <Link href="/booking" className="px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition">Book Appointment</Link>
+          <Link href="/service-agreement" className="px-6 py-3 border border-purple-600 text-purple-600 rounded hover:bg-purple-100 transition">Service Agreement</Link>
+          <Link href="/gift-card" className="px-6 py-3 border border-yellow-500 text-yellow-700 rounded hover:bg-yellow-100 transition">Buy Gift Card</Link>
         </div>
 
         <div className="text-left max-w-2xl space-y-6">
-          {/* News & Announcements */}
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold text-purple-800 mb-4">
-              📰 Latest News & Announcements
-            </h2>
+            <h2 className="text-2xl font-semibold text-purple-800 mb-4">📰 Latest News & Announcements</h2>
             <ul className="space-y-6">
               {announcements.map(({ id, title, date, description }) => (
                 <li key={id} className="border border-purple-300 rounded p-4 bg-white shadow-sm">
@@ -76,49 +74,51 @@ export default function Home() {
               ))}
             </ul>
           </section>
-
-          {/* Existing sections */}
           <section>
             <h2 className="text-2xl font-semibold text-purple-800 mb-2">
-              🌿 Our Services
+              🌟 Featured Services
             </h2>
-            <p className="text-gray-700">
-              From deep tissue massages and revitalizing scalp therapy to perfect nails and relaxing head spa rituals, every service is designed with your wellness in mind.
-            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+              {featuredServices.map((service) => (
+                <ServiceCard key={service._id} service={service} />
+              ))}
+            </div>
+
             <Link
               href="/all-services"
-              className="text-purple-600 underline hover:text-purple-800 inline-block mt-2"
+              className="text-purple-600 underline hover:text-purple-800 inline-block mt-4"
             >
-              Explore all services →
+              View All Services →
             </Link>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-purple-800 mb-2">
-              🎁 Gift the Experience
-            </h2>
-            <p className="text-gray-700">
-              Looking for the perfect present? Our gift cards let your loved ones choose their own moment of relaxation.
-            </p>
-            <Link
-              href="/gift-card"
-              className="text-purple-600 underline hover:text-purple-800 inline-block mt-2"
-            >
-              Learn more →
-            </Link>
+            <h2 className="text-2xl font-semibold text-purple-800 mb-2">🌿 Our Services</h2>
+            <p className="text-gray-700">From massages to scalp therapy...</p>
+            <Link href="/all-services" className="text-purple-600 underline hover:text-purple-800 inline-block mt-2">Explore all services →</Link>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-purple-800 mb-2">
-              📍 Visit Us
-            </h2>
-            <p className="text-gray-700">
-              Conveniently located in a peaceful corner of town, our spa is a serene escape from your daily routine.
-            </p>
-            <p className="text-sm text-gray-500 mt-1">2706 W Chicago Ave, Chicago, IL 60622</p>
+            <h2 className="text-2xl font-semibold text-purple-800 mb-2">🎁 Gift the Experience</h2>
+            <p className="text-gray-700">Our gift cards let your loved ones choose their moment of relaxation.</p>
+            <Link href="/gift-card" className="text-purple-600 underline hover:text-purple-800 inline-block mt-2">Learn more →</Link>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-purple-800 mb-2">📍 Visit Us</h2>
+            <p className="text-gray-700">2706 W Chicago Ave, Chicago, IL 60622</p>
           </section>
         </div>
       </div>
     </>
+  );
+}
+
+export default function Home({ initialServices }) {
+  return (
+    <ServicesProvider initialServices={initialServices}>
+      <HomeContent />
+    </ServicesProvider>
   );
 }
