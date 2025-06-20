@@ -224,6 +224,16 @@ export default function Layout({ children }) {
           </div>
         </div>
         <p className="text-center mt-8 text-xs">&copy; {new Date().getFullYear()} Sister Lavender Spa. All rights reserved.</p>
+        <p className="text-center mt-2 text-xs text-gray-500">
+          Built by{' '}
+          <a
+            href="mailto:leofran786@gmail.com"
+            className="text-purple-600 hover:underline"
+          >
+            Leo
+          </a>{' '}
+          – Need a website? Reach out.
+        </p>
       </footer>
     </>
   );
