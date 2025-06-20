@@ -7,31 +7,31 @@ export default function Services() {
     {
       title: '💆‍♀️ Head Spa Treatments',
       image: '/images/head.jpg',
-      description: 'Revitalize your scalp with nourishing treatments.',
+      description: 'Experience deep scalp relaxation with a rejuvenating head spa that promotes hair health, relieves tension, and enhances overall well-being.',
       link: '/services/head-spa',
     },
     {
       title: '🧘‍♀️ Head & Body Harmony Rituals',
       image: '/images/massage.jpg',
-      description: 'Relax and unwind with full-body massages.',
+      description: 'Indulge in a full-body sensory experience that combines head and body treatments to restore balance, ease stress, and elevate inner peace.',
       link: '/services/body-harmony',
     },
     {
       title: 'Body Massage Treatments',
-      image: '/images/foot.jpg',
-      description: 'Revitalize tired feet with expert callus removal and deep moisturizing treatments for softness and comfort.',
+      image: '/images/bodyMassage.jpg',
+      description: 'Release tension and restore vitality with personalized body massages designed to relax muscles, improve circulation, and boost overall wellness.',
       link: '/services/body-massage',
     },
     {
       title: 'Foot care',
-      image: '/images/foot.jpg',
-      description: 'Revitalize tired feet with expert callus removal and deep moisturizing treatments for softness and comfort.',
+      image: '/images/footCare.jpg',
+      description: 'Pamper your feet with expert care—callus removal, exfoliation, and deep hydration for comfort, softness, and refreshed soles.',
       link: '/services/foot-care',
     },
     {
       title: 'Manicure Services',
       image: '/images/manicure.jpg',
-      description: 'Enjoy beautifully shaped and polished nails with nourishing care for healthy, elegant hands.',
+      description: 'Achieve elegant, healthy hands with precision nail shaping, cuticle care, and long-lasting polish in a relaxing, hygienic setting.',
       link: '/services/manicure',
     },
     // {
