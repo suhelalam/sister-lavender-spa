@@ -211,7 +211,7 @@ export default function Layout({ children }) {
             <h4 className="font-semibold text-lg mb-2">Follow Us</h4>
             <p>
               <a
-                href="https://instagram.com"
+                href="https://www.instagram.com/sisterlavenderspa/"
                 className="text-purple-700 hover:underline"
                 target="_blank"
                 rel="noopener noreferrer"
