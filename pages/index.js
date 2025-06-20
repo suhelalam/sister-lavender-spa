@@ -17,7 +17,7 @@ export async function getServerSideProps() {
 function HomeContent() {
   const { services } = useServices();
 
-  const featuredServices = services.slice(0, 3); // or however you want
+  const featuredServices = services.slice(0, 4); // or however you want
   const announcements = [
     {
       id: 1,
@@ -56,7 +56,7 @@ function HomeContent() {
         </p>
 
         <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0 mb-8">
-          <Link href="/booking" className="px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition">Book Appointment</Link>
+          <Link href="/AllServices" className="px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition">Book Appointment</Link>
           <Link href="/service-agreement" className="px-6 py-3 border border-purple-600 text-purple-600 rounded hover:bg-purple-100 transition">Service Agreement</Link>
           <Link href="/gift-card" className="px-6 py-3 border border-yellow-500 text-yellow-700 rounded hover:bg-yellow-100 transition">Buy Gift Card</Link>
         </div>
@@ -86,7 +86,7 @@ function HomeContent() {
             </div>
 
             <Link
-              href="/all-services"
+              href="/AllServices"
               className="text-purple-600 underline hover:text-purple-800 inline-block mt-4"
             >
               View All Services →
@@ -96,7 +96,7 @@ function HomeContent() {
           <section>
             <h2 className="text-2xl font-semibold text-purple-800 mb-2">🌿 Our Services</h2>
             <p className="text-gray-700">From massages to scalp therapy...</p>
-            <Link href="/all-services" className="text-purple-600 underline hover:text-purple-800 inline-block mt-2">Explore all services →</Link>
+            <Link href="/AllServices" className="text-purple-600 underline hover:text-purple-800 inline-block mt-2">Explore all services →</Link>
           </section>
 
           <section>

@@ -62,7 +62,9 @@ export default function Layout({ children }) {
     <>
       <header className="bg-white shadow-md px-4 md:px-8 py-4 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="text-lg font-bold">Sister Lavender Spa</div>
+          <Link href="/" className="text-lg font-bold hover:text-purple-600 transition">
+            Sister Lavender Spa
+          </Link>
 
           {/* Desktop Nav */}
           <nav className="hidden md:flex space-x-6 items-center">
