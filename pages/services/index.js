@@ -1,3 +1,7 @@
+// app/services/page.tsx (or /services/page.jsx)
+
+import Image from 'next/image';
+
 export default function Services() {
   const serviceCategories = [
     {
@@ -40,19 +44,30 @@ export default function Services() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold mb-8 text-center">Our Services</h1>
-      <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+      <h1 className="text-3xl sm:text-4xl font-bold mb-10 text-center">Our Services</h1>
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {serviceCategories.map(({ title, image, description, link }) => (
           <a
             key={title}
             href={link}
             target={link.startsWith('http') ? '_blank' : '_self'}
             rel={link.startsWith('http') ? 'noopener noreferrer' : undefined}
-            className="block border rounded-lg overflow-hidden shadow hover:shadow-lg transition p-4"
+            className="block border rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition bg-white"
           >
-            <img src={image} alt={title} className="w-full h-40 object-cover mb-4 rounded" />
-            <h2 className="text-xl font-semibold mb-2">{title}</h2>
-            <p className="text-gray-700">{description}</p>
+            <div className="relative w-full h-48 sm:h-56 md:h-60 lg:h-64">
+              <Image
+                src={image}
+                alt={title}
+                fill
+                className="object-cover"
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                priority
+              />
+            </div>
+            <div className="p-4">
+              <h2 className="text-lg sm:text-xl font-semibold mb-2">{title}</h2>
+              <p className="text-gray-700 text-sm sm:text-base">{description}</p>
+            </div>
           </a>
         ))}
       </div>
