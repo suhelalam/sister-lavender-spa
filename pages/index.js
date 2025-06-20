@@ -11,9 +11,9 @@ export async function getServerSideProps() {
 
 function HomeContent() {
   const { services } = useServices();
-  console.log('Services in context:', services);
+  // console.log('Services in context:', services);
 
-  const featuredServices = services.slice(0, 4); // or however you want
+  const featuredServices = services.slice(1, 3); // or however you want
   const announcements = [
     {
       id: 1,
@@ -48,7 +48,7 @@ function HomeContent() {
           Welcome to Sister Lavender Spa
         </h1>
         <p className="text-lg text-gray-700 mb-6 max-w-xl">
-          A peaceful sanctuary where beauty meets wellness...
+          ✨ Relaxation and Beauty from Scalp to Sole ✨
         </p>
 
         <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0 mb-8">
