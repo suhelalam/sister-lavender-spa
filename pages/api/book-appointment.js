@@ -3,7 +3,7 @@ import { SquareClient } from 'square';
 const client = new SquareClient({
   token: process.env.SQUARE_ACCESS_TOKEN,
 });
-
+// testing
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
