@@ -12,14 +12,14 @@ export default async function handler(req, res) {
   try {
     const { items } = req.body;
     items.forEach(item => {
-    console.log('Price:', item.price, 'Price * 100:', item.price * 100);
+    // console.log('Price:', item.price, 'Price * 100:', item.price * 100);
     });
     const totalAmount = items.reduce((total, item) => {
   // Assume item.price is already in cents, just multiply by quantity
         return total + BigInt(item.price) * BigInt(item.quantity);
     }, BigInt(0));
 
-    if (!process.env.SQUARE_LOCATION_ID) {
+    if (!process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID) {
       throw new Error("Missing SQUARE_LOCATION_ID in environment variables");
     }
 
@@ -31,18 +31,18 @@ export default async function handler(req, res) {
           amount: totalAmount,
           currency: "USD",
         },
-        locationId: process.env.SQUARE_LOCATION_ID,
+        locationId: process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID,
       },
     });
 
-    console.log("🔍 Full Square API Response:", {
-        keys: Object.keys(response),
-        result: response.result,
-    });
+    // console.log("🔍 Full Square API Response:", {
+    //     keys: Object.keys(response),
+    //     result: response.result,
+    // });
 
     // ✅ Safely access the paymentLink
     const link = response?.paymentLink?.url;
-    console.log(link)
+    // console.log(link)
 
     if (!link) {
       throw new Error("No payment link returned from Square");

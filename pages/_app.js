@@ -3,6 +3,7 @@ import '../styles/globals.css';
 import Layout from '../components/Layout';
 import { CartProvider } from '../context/CartContext';
 import { ServicesProvider } from '../context/ServicesContext';
+import { BookingProvider } from '../context/BookingContext';
 
 export default function App({ Component, pageProps }) {
   const { initialServices = [] } = pageProps;
@@ -10,9 +11,11 @@ export default function App({ Component, pageProps }) {
   return (
     <ServicesProvider initialServices={initialServices}>
       <CartProvider>
-        <Layout>
-          <Component {...pageProps} />
-        </Layout>
+        <BookingProvider>  {/* <-- wrap here */}
+          <Layout>
+            <Component {...pageProps} />
+          </Layout>
+        </BookingProvider>
       </CartProvider>
     </ServicesProvider>
   );

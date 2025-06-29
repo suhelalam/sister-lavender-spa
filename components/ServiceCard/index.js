@@ -28,6 +28,7 @@ export default function ServiceCard({ service }) {
       price: selectedVariation.price,
       currency: selectedVariation.currency,
       quantity: 1,
+      duration: selectedVariation.duration, // keep in ms
     });
   };
 
