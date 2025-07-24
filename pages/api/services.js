@@ -9,6 +9,7 @@ function replacer(key, value) {
   return typeof value === "bigint" ? Number(value) : value;
 }
 
+
 export default async function handler(req, res) {
   try {
     const response = await client.catalog.list({ types: "ITEM" });

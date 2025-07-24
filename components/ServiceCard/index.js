@@ -29,6 +29,7 @@ export default function ServiceCard({ service }) {
       currency: selectedVariation.currency,
       quantity: 1,
       duration: selectedVariation.duration, // keep in ms
+      version: selectedVariation.version,
     });
   };
 
