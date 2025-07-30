@@ -23,6 +23,9 @@ export default async function handler(req, res) {
           phoneNumber: {
             exact: customer.phoneNumber,
           },
+          emailAddress: {
+            exact: customer.emailAddress
+          }
         },
       },
     });
@@ -36,8 +39,12 @@ export default async function handler(req, res) {
       // console.log('ℹ️ No existing customer found. Creating new one...');
       // console.log("Ceating cus: ", customer);
       const createRes = await client.customers.create(customer);
-      customerId = createRes.result.customer.id;
-      // console.log('✅ Created new customer:', customerId);
+      // if (!createRes.result?.customer?.id) {
+      //   throw new Error('Customer created but no ID returned from Square API');
+      // }
+      
+      customerId = createRes.customer.id;
+      // console.log('✅ Created new customer:', createRes.customer?.id);
     }
 
     // 2. Create appointment

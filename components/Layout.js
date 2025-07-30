@@ -33,7 +33,7 @@ function ClientOnlyCheckoutButton({ items, onClick }) {
 
   return (
     <Link
-      href="/select-time"
+      href="/booking"
       onClick={onClick}
       className={`bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 ${
         items.length === 0 ? 'opacity-50 pointer-events-none' : ''
