@@ -17,15 +17,15 @@ function HomeContent() {
   const announcements = [
     {
       id: 1,
-      title: '🌸 New Customer Offer',
-      date: 'June 20, 2025',
-      description: 'Enjoy 20% off all services booked this month during our soft opening.',
+      title: 'Share your expereince',
+      date: 'August 1, 2025 - August 31, 2025',
+      description: 'Enjoy 10% off all services when you post a google review.',
     },
     {
       id: 2,
       title: '✨ Self-Care is Better Together',
-      date: 'June 10, 2025',
-      description: 'Bring in a friend or loved one and enjoy 25% off for both.',
+      date: 'August 1, 2025 - August 31, 2025',
+      description: 'Bring in a friend or loved one for our head spa services and enjoy 20% off for both.',
     },
   ];
 
