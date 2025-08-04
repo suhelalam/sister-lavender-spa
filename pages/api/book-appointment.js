@@ -7,9 +7,9 @@ const client = new SquareClient({
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { customer, serviceVariationId, startAt, locationId, serviceVariationVersion, } = req.body;
+  const { customer, services, startAt, locationId } = req.body;
 
-  console.log('🔍 Incoming request body:', req.body);
+  // console.log('🔍 Incoming request body:', req.body);
 
   try {
     // 1. Search or create customer
@@ -47,18 +47,18 @@ export default async function handler(req, res) {
       // console.log('✅ Created new customer:', createRes.customer?.id);
     }
 
+    const appointmentSegments = services.map((service) => ({
+      teamMemberId: "TMik65OJ7fLNHQvv", // Adjust per-service if needed
+      serviceVariationId: service.serviceVariationId,
+      serviceVariationVersion: BigInt(service.serviceVariationVersion),
+    }));
+
     // 2. Create appointment
     const appointmentPayload = {
       locationId,
       customerId,
       startAt,
-      appointmentSegments: [
-        {
-          teamMemberId: "TMik65OJ7fLNHQvv",
-          serviceVariationId,
-          serviceVariationVersion: BigInt(serviceVariationVersion),
-        },
-      ],
+      appointmentSegments,
     };
 
     // console.log('📦 Creating appointment with payload:', appointmentPayload);

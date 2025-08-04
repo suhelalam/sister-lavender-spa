@@ -63,7 +63,7 @@ export default function SelectTimePage() {
 
         const data = await res.json();
         if (data.success) {
-          const closingHour = 20; // remove this line
+          // const closingHour = 20; // remove this line
           const durationMinutes = services[0].duration || 60;
 
           const filtered = data.availabilities.filter((slot) => {

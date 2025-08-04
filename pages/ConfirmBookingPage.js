@@ -75,8 +75,11 @@ export default function ConfirmBookingPage() {
             emailAddress: email,
             phoneNumber: formatPhoneToE164(phone),
             },
-            serviceVariationId,
-            serviceVariationVersion: serviceVariationVersion,
+            services: items.map((item) => ({
+              serviceVariationId: item.id,
+              serviceVariationVersion: item.version,
+              durationMinutes: item.durationMinutes || 30, // optional
+            })),
             startAt: selectedSlot.startAt,
             locationId,
           }),
