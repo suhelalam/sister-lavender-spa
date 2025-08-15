@@ -34,12 +34,12 @@ export default function Services() {
       description: 'Achieve elegant, healthy hands with precision nail shaping, cuticle care, and long-lasting polish in a relaxing, hygienic setting.',
       link: '/services/manicure',
     },
-    // {
-    //   title: 'Facial',
-    //   image: '/images/facial.jpg',
-    //   description: 'Rejuvenate your skin with gentle cleansing, nourishing masks, and expert pampering for a radiant glow.',
-    //   link: '/services/body-massage',
-    // },
+    {
+      title: 'Cupping Therapy',
+      image: '/images/cupping.png',
+      description: 'Revitalize your body with cupping therapy—relieve tension, boost circulation, and restore balance.',
+      link: '/services/cupping-therapy',
+    },
   ];
 
   return (
