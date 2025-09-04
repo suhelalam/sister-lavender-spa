@@ -24,8 +24,8 @@ function HomeContent() {
     {
       id: 2,
       title: '✨ Self-Care is Better Together',
-      date: 'August 1, 2025 - August 31, 2025',
-      description: 'Bring in a friend or loved one for our head spa services and enjoy 20% off for both.',
+      date: 'September 1, 2025 - September 30, 2025',
+      description: 'Bring in a friend or loved one for our head spa services and enjoy 20% off for both. Must pay cash and post a review for this promotion.',
     },
   ];
 
