@@ -17,15 +17,17 @@ function HomeContent() {
   const announcements = [
     {
       id: 1,
-      title: 'Share your expereince',
-      date: 'August 1, 2025 - August 31, 2025',
-      description: 'Enjoy 10% off all services when you post a google review.',
+      title: "🌸 Share the Serenity",
+      date: "September 1, 2025 - September 30, 2025",
+      description: "Recommend Sister Lavender Spa to a friend, and when they book a service, you’ll both receive 10% off your next visit. A little gratitude for spreading the glow!",
+      note: "*Valid only for new client referrals. Discount applies once per client and may not be combined with other offers.*",
     },
     {
       id: 2,
       title: '✨ Self-Care is Better Together',
       date: 'September 1, 2025 - September 30, 2025',
-      description: 'Bring in a friend or loved one for our head spa services and enjoy 20% off for both. Must pay cash and post a review for this promotion.',
+      description: 'Bring in a friend or loved one for our head spa services and enjoy 20% off for both.',
+      note: '*Must pay cash and post a review for this promotion.',
     },
   ];
 
@@ -61,11 +63,12 @@ function HomeContent() {
           <section className="mb-10">
             <h2 className="text-2xl font-semibold text-purple-800 mb-4">📰 Latest News & Announcements</h2>
             <ul className="space-y-6">
-              {announcements.map(({ id, title, date, description }) => (
+              {announcements.map(({ id, title, date, description, note }) => (
                 <li key={id} className="border border-purple-300 rounded p-4 bg-white shadow-sm">
                   <h3 className="text-xl font-bold text-purple-700">{title}</h3>
                   <p className="text-sm text-gray-500 mb-2">{date}</p>
                   <p>{description}</p>
+                  <p className="text-sm text-gray-600">{note}</p>
                 </li>
               ))}
             </ul>
