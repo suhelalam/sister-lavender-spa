@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   }
 
   // ✅ Build appointment date safely
-  const appointmentDateSimple = startAt
+  const appointmentDate = startAt
   ? new Date(startAt).toLocaleString('en-US', { 
       timeZone: 'America/Chicago', // ← CHANGE TO YOUR TIMEZONE
       month: 'numeric',
