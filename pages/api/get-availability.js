@@ -13,7 +13,14 @@ export default async function handler(req, res) {
     
     // Get day of week (0 = Sunday, 1 = Monday, etc.)
     const dateObj = new Date(year, month - 1, day);
-    const isSunday = dateObj.getDay() === 0;
+    const dayOfWeek = dateObj.getDay();
+    
+    // Check if Tuesday (day 2) - return empty array
+    if (dayOfWeek === 2) { // 2 = Tuesday
+      return []; // No slots for Tuesdays
+    }
+    
+    const isSunday = dayOfWeek === 0;
     
     const startHour = 9;
     const startMinute = 30;

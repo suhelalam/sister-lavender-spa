@@ -27,7 +27,7 @@ export default function Location() {
             </li>
             <li className="flex">
               <span className="w-24 font-semibold">Tuesday:</span>
-              <span>9:30AM - 8:00PM</span>
+              <span>Closed</span>
             </li>
             <li className="flex">
               <span className="w-24 font-semibold">Wednesday:</span>
