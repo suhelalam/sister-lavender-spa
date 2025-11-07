@@ -1,32 +1,29 @@
-'use client';
+'use client'
 
-import { ServicesProvider, useServices } from '../../context/ServicesContext';
-import ServiceCard from '../../components/ServiceCard';
-import { CATEGORY_IDS } from '../../constants/categories';
-import { getInitialServices } from '../../lib/fetchServices';
-
-export async function getServerSideProps() {
-  const initialServices = await getInitialServices();
-  return { props: { initialServices } };
-}
-
-
+import { ServicesProvider, useServices } from "../../context/ServicesContext";
+import ServiceCard from "../../components/ServiceCard/";
 
 function BodyMassagePage() {
-  const { services } = useServices();
-  const filtered = services.filter(service => service.category_id === CATEGORY_IDS.BODY_MASSAGE_CATEGORY_ID);
+  const { services, loading } = useServices();
+
+  if (loading) return <p>Loading services...</p>;
+
+  const filtered = services.filter(
+    (service) => service.category === "Body Massage Treatments"
+  );
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
-      <h1 className="text-3xl sm:text-4xl font-bold mb-6 text-purple-700">
+      <h1 className="text-3xl font-bold mb-6 text-purple-700">
         Body Massage Treatments
       </h1>
+
       {filtered.length === 0 ? (
         <p className="text-gray-600">No services found in this category.</p>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((service) => (
-            <ServiceCard key={service.id} service={service} />
+          {filtered.map((service, idx) => (
+            <ServiceCard key={idx} service={service} />
           ))}
         </div>
       )}
@@ -34,11 +31,10 @@ function BodyMassagePage() {
   );
 }
 
-export default function BodyMassage({ initialServices }) {
+export default function BodyMassage() {
   return (
-    <ServicesProvider initialServices={initialServices}>
-      <BodyMassagePage/>
+    <ServicesProvider>
+      <BodyMassagePage />
     </ServicesProvider>
-  )
-
+  );
 }

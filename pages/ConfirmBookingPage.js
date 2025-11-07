@@ -17,6 +17,7 @@ export default function ConfirmBookingPage() {
   const [email, setEmail] = useState('');
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [note, setNote] = useState('');
+  const [partySize, setPartySize] = useState(1);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -65,7 +66,7 @@ export default function ConfirmBookingPage() {
           throw new Error('Missing service variation or location information.');
         }
 
-        const bookingRes = await fetch('/api/book-appointment', {
+        const bookingRes = await fetch('/api/send-booking-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -77,11 +78,14 @@ export default function ConfirmBookingPage() {
             },
             services: items.map((item) => ({
               serviceVariationId: item.id,
+              serviceName: item.name,
               serviceVariationVersion: item.version,
               durationMinutes: item.durationMinutes || 30, // optional
+              quantity: partySize,
             })),
             startAt: selectedSlot.startAt,
             locationId,
+            totalFormatted,
           }),
         });
 
@@ -125,6 +129,17 @@ export default function ConfirmBookingPage() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Number of People</label>
+            <input
+              type="number"
+              min="1"
+              max="10"
+              value={partySize}
+              onChange={(e) => setPartySize(parseInt(e.target.value, 10))}
+              className="border rounded px-3 py-2 w-full"
             />
           </div>
 

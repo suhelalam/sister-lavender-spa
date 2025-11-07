@@ -2,18 +2,14 @@
 
 import { ServicesProvider, useServices } from '../../context/ServicesContext';
 import ServiceCard from '../../components/ServiceCard';
-import { CATEGORY_IDS } from '../../constants/categories';
-import { getInitialServices } from '../../lib/fetchServices';
-
-export async function getServerSideProps() {
-  const initialServices = await getInitialServices();
-  return { props: { initialServices } };
-}
 
 function CuppingTherapyPage() {
-  const { services } = useServices();
+  const { services, loading } = useServices();
+
+  if (loading) return <p>Loading services...</p>;
+
   const filtered = services.filter(
-    (service) => service.category_id === CATEGORY_IDS.CUPPING_THERAPY_CATEGORY_ID
+    (service) => service.category === "Cupping Therapy"
   );
 
   return (
@@ -25,8 +21,8 @@ function CuppingTherapyPage() {
         <p className="text-gray-600">No services found in this category.</p>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((service) => (
-            <ServiceCard key={service.id} service={service} />
+          {filtered.map((service, idx) => (
+            <ServiceCard key={idx} service={service} />
           ))}
         </div>
       )}
@@ -34,9 +30,9 @@ function CuppingTherapyPage() {
   );
 }
 
-export default function CuppingTherapy({ initialServices }) {
+export default function CuppingTherapy() {
   return (
-    <ServicesProvider initialServices={initialServices}>
+    <ServicesProvider>
       <CuppingTherapyPage />
     </ServicesProvider>
   );
