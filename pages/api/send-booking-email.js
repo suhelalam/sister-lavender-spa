@@ -30,9 +30,16 @@ export default async function handler(req, res) {
   }
 
   // ✅ Build appointment date safely
-  const appointmentDate = selectedSlot?.startAt
-    ? new Date(selectedSlot.startAt).toLocaleString()
-    : 'Not provided';
+  const appointmentDateSimple = startAt
+  ? new Date(startAt).toLocaleString('en-US', { 
+      timeZone: 'America/Chicago', // ← CHANGE TO YOUR TIMEZONE
+      month: 'numeric',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  : 'Not provided';
 
   // ✅ Build services list safely
   const serviceList = Array.isArray(services)
