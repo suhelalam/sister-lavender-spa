@@ -9,32 +9,74 @@ export default function StripeTerminal() {
   const [reader, setReader] = useState(null);
   const [readers, setReaders] = useState([]);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [initError, setInitError] = useState(null);
+  const [currentPaymentIntent, setCurrentPaymentIntent] = useState(null);
 
   useEffect(() => {
     const initializeTerminal = async () => {
       try {
-        // Dynamically import the terminal JS
-        const StripeTerminal = await import('@stripe/terminal-js');
-        const terminalInstance = StripeTerminal.Terminal;
+        console.log('Starting terminal initialization...');
         
-        const initializedTerminal = await terminalInstance.create({
-          onFetchConnectionToken: async () => {
-            const response = await fetch('/api/stripe-terminal-token', {
-              method: 'POST',
+        // Load Stripe Terminal from CDN
+        const script = document.createElement('script');
+        script.src = 'https://js.stripe.com/terminal/v1/';
+        script.async = true;
+        
+        script.onload = async () => {
+          try {
+            console.log('Stripe Terminal CDN loaded, window.StripeTerminal:', window.StripeTerminal);
+            
+            if (!window.StripeTerminal) {
+              throw new Error('StripeTerminal not found on window object');
+            }
+
+            const initializedTerminal = await window.StripeTerminal.create({
+              onFetchConnectionToken: async () => {
+                console.log('Fetching connection token...');
+                try {
+                  const response = await fetch('/api/stripe-terminal-token', {
+                    method: 'POST',
+                  });
+                  if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                  }
+                  const data = await response.json();
+                  console.log('Connection token received');
+                  return data.secret;
+                } catch (error) {
+                  console.error('Error fetching connection token:', error);
+                  throw error;
+                }
+              },
+              onUnexpectedReaderDisconnect: () => {
+                console.log('Reader disconnected unexpectedly');
+                setReader(null);
+                alert('Reader disconnected');
+              },
             });
-            const { secret } = await response.json();
-            return secret;
-          },
-          onUnexpectedReaderDisconnect: () => {
-            setReader(null);
-            alert('Reader disconnected');
-          },
-        });
-        
-        setTerminal(initializedTerminal);
+            
+            console.log('Terminal created successfully:', initializedTerminal);
+            setTerminal(initializedTerminal);
+            setInitError(null);
+          } catch (error) {
+            console.error('Failed to create terminal:', error);
+            setInitError(error.message);
+          } finally {
+            setIsInitializing(false);
+          }
+        };
+
+        script.onerror = () => {
+          console.error('Failed to load Stripe Terminal script');
+          setInitError('Failed to load Stripe Terminal library');
+          setIsInitializing(false);
+        };
+
+        document.head.appendChild(script);
+
       } catch (error) {
         console.error('Failed to initialize Stripe Terminal:', error);
-      } finally {
+        setInitError(error.message);
         setIsInitializing(false);
       }
     };
@@ -49,16 +91,20 @@ export default function StripeTerminal() {
     }
     
     try {
+      console.log('Discovering readers...');
       const discoveryResult = await terminal.discoverReaders();
+      console.log('Discovery result:', discoveryResult);
+      
       if (discoveryResult.error) {
         console.error('Discovery failed:', discoveryResult.error);
         alert('Failed to discover readers: ' + discoveryResult.error.message);
       } else {
         setReaders(discoveryResult.discoveredReaders);
+        console.log('Discovered readers:', discoveryResult.discoveredReaders);
       }
     } catch (error) {
       console.error('Discovery error:', error);
-      alert('Error discovering readers');
+      alert('Error discovering readers: ' + error.message);
     }
   };
 
@@ -66,16 +112,20 @@ export default function StripeTerminal() {
     if (!terminal) return;
     
     try {
+      console.log('Connecting to reader:', readerToConnect);
       const connectResult = await terminal.connectReader(readerToConnect);
+      console.log('Connect result:', connectResult);
+      
       if (connectResult.error) {
         console.error('Connection failed:', connectResult.error);
         alert('Connection failed: ' + connectResult.error.message);
       } else {
         setReader(connectResult.reader);
+        console.log('Reader connected successfully');
       }
     } catch (error) {
       console.error('Connection error:', error);
-      alert('Error connecting to reader');
+      alert('Error connecting to reader: ' + error.message);
     }
   };
 
@@ -85,8 +135,27 @@ export default function StripeTerminal() {
     try {
       await terminal.disconnectReader();
       setReader(null);
+      console.log('Reader disconnected');
     } catch (error) {
       console.error('Disconnection error:', error);
+    }
+  };
+
+  const cancelCurrentPayment = async () => {
+    if (!terminal) {
+      alert('Terminal not initialized');
+      return;
+    }
+
+    try {
+      console.log('Canceling current payment...');
+      await terminal.cancelCollectPaymentMethod();
+      setIsLoading(false);
+      setCurrentPaymentIntent(null);
+      alert('Payment canceled');
+    } catch (error) {
+      console.error('Error canceling payment:', error);
+      alert('Error canceling payment: ' + error.message);
     }
   };
 
@@ -103,6 +172,8 @@ export default function StripeTerminal() {
 
     setIsLoading(true);
     try {
+      console.log('Creating payment intent for amount:', amount);
+      
       // Create payment intent
       const paymentIntentResponse = await fetch('/api/create-payment-intent', {
         method: 'POST',
@@ -116,19 +187,26 @@ export default function StripeTerminal() {
       });
 
       if (!paymentIntentResponse.ok) {
-        throw new Error('Failed to create payment intent');
+        const errorText = await paymentIntentResponse.text();
+        throw new Error(`API error: ${paymentIntentResponse.status} - ${errorText}`);
       }
 
       const paymentIntent = await paymentIntentResponse.json();
+      console.log('Payment intent created:', paymentIntent);
+      setCurrentPaymentIntent(paymentIntent);
 
       // Process payment
+      console.log('Collecting payment method...');
       const collectResult = await terminal.collectPaymentMethod(paymentIntent.client_secret);
+      console.log('Collect result:', collectResult);
       
       if (collectResult.error) {
         throw new Error(collectResult.error.message);
       }
 
+      console.log('Processing payment...');
       const confirmResult = await terminal.processPayment(collectResult.paymentIntent);
+      console.log('Confirm result:', confirmResult);
       
       if (confirmResult.error) {
         throw new Error(confirmResult.error.message);
@@ -136,9 +214,11 @@ export default function StripeTerminal() {
 
       alert(`Payment successful! $${amount} charged.`);
       setAmount('');
+      setCurrentPaymentIntent(null);
     } catch (error) {
       console.error('Payment failed:', error);
       alert('Payment failed: ' + error.message);
+      setCurrentPaymentIntent(null);
     } finally {
       setIsLoading(false);
     }
@@ -148,7 +228,22 @@ export default function StripeTerminal() {
     return (
       <div className="p-6 border rounded-lg bg-white max-w-md mx-auto text-center">
         <h2 className="text-2xl font-bold mb-4 text-purple-700">Stripe Terminal</h2>
-        <p>Initializing terminal...</p>
+        <p>Loading Stripe Terminal library...</p>
+        {initError && (
+          <p className="text-red-500 mt-2">Error: {initError}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (initError) {
+    return (
+      <div className="p-6 border rounded-lg bg-white max-w-md mx-auto text-center">
+        <h2 className="text-2xl font-bold mb-4 text-purple-700">Stripe Terminal</h2>
+        <p className="text-red-500">Failed to initialize terminal: {initError}</p>
+        <p className="text-sm text-gray-600 mt-2">
+          Make sure you have internet connection and try refreshing the page.
+        </p>
       </div>
     );
   }
@@ -195,7 +290,7 @@ export default function StripeTerminal() {
                 <p className="text-gray-600">No readers found</p>
                 <button 
                   onClick={discoverReaders}
-                  className="mt-2 bg-gray-200 px-4 py-2 rounded text-sm"
+                  className="mt-2 bg-purple-600 text-white px-4 py-2 rounded text-sm"
                 >
                   Search Readers
                 </button>
@@ -217,14 +312,26 @@ export default function StripeTerminal() {
         )}
       </div>
 
-      {/* Payment Button */}
-      <button
-        onClick={handlePayment}
-        disabled={!reader || !amount || isLoading}
-        className="w-full bg-green-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-green-700 transition"
-      >
-        {isLoading ? 'Processing...' : `Charge $${amount || '0.00'}`}
-      </button>
+      {/* Payment Buttons */}
+      <div className="space-y-3">
+        <button
+          onClick={handlePayment}
+          disabled={!reader || !amount || isLoading}
+          className="w-full bg-green-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-green-700 transition"
+        >
+          {isLoading ? 'Processing...' : `Charge $${amount || '0.00'}`}
+        </button>
+        
+        {/* Cancel Button - Only show when payment is in progress */}
+        {isLoading && (
+          <button
+            onClick={cancelCurrentPayment}
+            className="w-full bg-red-600 text-white p-4 rounded-lg text-lg font-semibold hover:bg-red-700 transition"
+          >
+            Cancel Payment
+          </button>
+        )}
+      </div>
     </div>
   );
 }
