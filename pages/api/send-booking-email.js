@@ -21,8 +21,6 @@ export default async function handler(req, res) {
   const lastName = customer?.familyName;
   const email = customer?.emailAddress;
   const phone = customer?.phoneNumber;
-  const selectedSlot = { startAt };
-  
 
   // ✅ Basic validation
   if (!firstName || !lastName || !email || !phone) {
@@ -32,7 +30,7 @@ export default async function handler(req, res) {
   // ✅ Build appointment date safely
   const appointmentDate = startAt
   ? new Date(startAt).toLocaleString('en-US', { 
-      timeZone: 'America/Chicago', // ← CHANGE TO YOUR TIMEZONE
+      timeZone: 'America/Chicago',
       month: 'numeric',
       day: 'numeric',
       year: 'numeric',
@@ -48,16 +46,17 @@ export default async function handler(req, res) {
 
   // ✅ Configure transporter
   const transporter = nodemailer.createTransport({
-    service: 'gmail', // or use { host, port, secure } for custom SMTP
+    service: 'gmail',
     auth: {
       user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS, // App password or SMTP password
+      pass: process.env.SMTP_PASS,
     },
   });
 
-  const mailOptions = {
-    from: `"Booking Form" <${process.env.SMTP_USER}>`,
-    to: process.env.WORK_EMAIL, // Your receiving email
+  // 📧 Email 1: Notification to YOU
+  const notificationMail = {
+    from: `"Booking System" <${process.env.SMTP_USER}>`,
+    to: process.env.WORK_EMAIL,
     subject: `New Booking Request - ${firstName} ${lastName}`,
     text: `
 New booking request:
@@ -73,11 +72,88 @@ Note: ${note || 'None'}
     `,
   };
 
+  // 📧 Email 2: Confirmation to CUSTOMER
+  const confirmationMail = {
+    from: `"Sister Lavender Spa" <${process.env.SMTP_USER}>`,
+    to: email,
+    subject: `Booking Confirmation - ${appointmentDate}`,
+    html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .header { background: #f8f9fa; padding: 20px; text-align: center; }
+    .content { padding: 20px; }
+    .footer { background: #f8f9fa; padding: 15px; text-align: center; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>Booking Confirmed! 🎉</h2>
+  </div>
+  <div class="content">
+    <p>Hi ${firstName},</p>
+    <p>Your appointment has been confirmed. We look forward to seeing you!</p>
+    
+    <h3>Appointment Details:</h3>
+    <p><strong>Date & Time:</strong> ${appointmentDate}</p>
+    <p><strong>Services:</strong> ${serviceList}</p>
+    <p><strong>Party Size:</strong> ${partySize || 1}</p>
+    ${totalFormatted ? `<p><strong>Total:</strong> ${totalFormatted}</p>` : ''}
+    
+    <p><strong>Note:</strong> ${note || 'None provided'}</p>
+    
+    <p>Please arrive 10-15 minutes before your scheduled time.</p>
+    
+    <p>If you need to reschedule or cancel, please contact us at least 24 hours in advance.</p>
+  </div>
+  <div class="footer">
+    <p>Thank you for choosing us!<br>
+    Your Business Name<br>
+    Phone: (555) 123-4567<br>
+    Address: 123 Business St, Your City</p>
+  </div>
+</body>
+</html>
+    `,
+    text: `
+Booking Confirmed!
+
+Hi ${firstName},
+
+Your appointment has been confirmed. We look forward to seeing you!
+
+Appointment Details:
+----------------------------
+Date & Time: ${appointmentDate}
+Services: ${serviceList}
+Party Size: ${partySize || 1}
+${totalFormatted ? `Total: ${totalFormatted}` : ''}
+Note: ${note || 'None provided'}
+
+Please arrive 10-15 minutes before your scheduled time.
+
+If you need to reschedule or cancel, please contact us at least 24 hours in advance.
+
+Thank you for choosing us!
+Your Business Name
+Phone: (555) 123-4567
+Address: 123 Business St, Your City
+    `
+  };
+
   try {
-    await transporter.sendMail(mailOptions);
-    return res.status(200).json({ success: true, message: 'Email sent successfully' });
+    // Send both emails
+    await transporter.sendMail(notificationMail);
+    await transporter.sendMail(confirmationMail);
+    
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Booking notification and customer confirmation sent successfully' 
+    });
   } catch (err) {
-    console.error('Error sending email:', err);
-    return res.status(500).json({ error: 'Failed to send email' });
+    console.error('Error sending emails:', err);
+    return res.status(500).json({ error: 'Failed to send emails' });
   }
 }
