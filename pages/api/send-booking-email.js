@@ -137,9 +137,9 @@ Please arrive 10-15 minutes before your scheduled time.
 If you need to reschedule or cancel, please contact us at least 24 hours in advance.
 
 Thank you for choosing us!
-Your Business Name
-Phone: (555) 123-4567
-Address: 123 Business St, Your City
+Sister Lavender Spa
+Phone: (312) 900-3131
+Address: 2706 W Chicago Ave, Chicago, IL 60622
     `
   };
 

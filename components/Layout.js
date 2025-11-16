@@ -205,6 +205,10 @@ export default function Layout({ children }) {
               <span className="w-20 font-semibold">Sun:</span>
               <span>9:30 AM – 6 PM</span>
             </p>
+            <p className="flex text-red-600 font-medium">
+              <span className="w-20 font-semibold">Tuesday:</span>
+              <span>Closed</span>
+            </p>
           </div>
 
           <div>
