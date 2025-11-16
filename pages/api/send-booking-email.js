@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { google } from 'googleapis';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
   const phone = customer?.phoneNumber;
 
   // ✅ Basic validation
-  if (!firstName || !lastName || !email || !phone) {
+  if (!firstName || !lastName || !email || !phone || !startAt) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -52,6 +53,66 @@ export default async function handler(req, res) {
       pass: process.env.SMTP_PASS,
     },
   });
+
+  // 🗓️ GOOGLE CALENDAR INTEGRATION
+  async function addToGoogleCalendar() {
+  try {
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      },
+      scopes: ['https://www.googleapis.com/auth/calendar'],
+    });
+
+    const calendar = google.calendar({ version: 'v3', auth });
+    
+    const startTime = new Date(startAt);
+    const endTime = new Date(startTime.getTime() + (60 * 60 * 1000));
+    
+    const event = {
+      summary: `Appointment: ${firstName} ${lastName} - ${serviceList}`,
+      description: `
+Client: ${firstName} ${lastName}
+Email: ${email}
+Phone: ${phone}
+Services: ${serviceList}
+Party Size: ${partySize || 1}
+Total: ${totalFormatted || 'N/A'}
+Note: ${note || 'None'}
+      `.trim(),
+      start: {
+        dateTime: startTime.toISOString(),
+        timeZone: 'America/Chicago',
+      },
+      end: {
+        dateTime: endTime.toISOString(),
+        timeZone: 'America/Chicago',
+      },
+      // ❌ REMOVED attendees array
+      location: '2706 W Chicago Ave, Chicago, IL 60622',
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: 'email', minutes: 24 * 60 },
+          { method: 'popup', minutes: 30 },
+        ],
+      },
+    };
+
+    const response = await calendar.events.insert({
+      calendarId: 'primary',
+      resource: event,
+      // ❌ REMOVED sendUpdates
+    });
+
+    console.log('Google Calendar event created:', response.data.htmlLink);
+    return response.data;
+  } catch (error) {
+    console.error('Error creating Google Calendar event:', error);
+    throw error;
+  }
+}
 
   // 📧 Email 1: Notification to YOU
   const notificationMail = {
@@ -110,9 +171,9 @@ Note: ${note || 'None'}
   </div>
   <div class="footer">
     <p>Thank you for choosing us!<br>
-    Your Business Name<br>
-    Phone: (555) 123-4567<br>
-    Address: 123 Business St, Your City</p>
+    Sister Lavender Spa<br>
+    Phone: (312) 900-3131<br>
+    Address: 2706 W Chicago Ave, Chicago, IL 60622</p>
   </div>
 </body>
 </html>
@@ -144,16 +205,23 @@ Address: 2706 W Chicago Ave, Chicago, IL 60622
   };
 
   try {
-    // Send both emails
+    // 🗓️ 1. Add to Google Calendar
+    const calendarEvent = await addToGoogleCalendar();
+    
+    // 📧 2. Send both emails
     await transporter.sendMail(notificationMail);
     await transporter.sendMail(confirmationMail);
     
     return res.status(200).json({ 
       success: true, 
-      message: 'Booking notification and customer confirmation sent successfully' 
+      message: 'Booking created in calendar and emails sent successfully',
+      calendarEvent: {
+        id: calendarEvent.id,
+        link: calendarEvent.htmlLink
+      }
     });
   } catch (err) {
-    console.error('Error sending emails:', err);
-    return res.status(500).json({ error: 'Failed to send emails' });
+    console.error('Error processing booking:', err);
+    return res.status(500).json({ error: 'Failed to process booking' });
   }
 }

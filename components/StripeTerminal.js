@@ -11,6 +11,14 @@ export default function StripeTerminal() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [initError, setInitError] = useState(null);
   const [currentPaymentIntent, setCurrentPaymentIntent] = useState(null);
+  const [includeFee, setIncludeFee] = useState(false);
+
+  // Calculate amounts with fee
+  const baseAmount = parseFloat(amount) || 0;
+  const feeAmount = baseAmount * 0.03;
+  const totalWithFee = baseAmount + feeAmount;
+  const displayAmount = includeFee ? totalWithFee : baseAmount;
+  const finalChargeAmount = Math.round(displayAmount * 100); // Convert to cents
 
   useEffect(() => {
     const initializeTerminal = async () => {
@@ -172,7 +180,7 @@ export default function StripeTerminal() {
 
     setIsLoading(true);
     try {
-      console.log('Creating payment intent for amount:', amount);
+      console.log('Creating payment intent for amount:', finalChargeAmount);
       
       // Create payment intent
       const paymentIntentResponse = await fetch('/api/create-payment-intent', {
@@ -181,7 +189,7 @@ export default function StripeTerminal() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          amount: Math.round(parseFloat(amount) * 100),
+          amount: finalChargeAmount,
           currency: 'usd',
         }),
       });
@@ -212,8 +220,15 @@ export default function StripeTerminal() {
         throw new Error(confirmResult.error.message);
       }
 
-      alert(`Payment successful! $${amount} charged.`);
+      // Show appropriate success message based on fee inclusion
+      if (includeFee) {
+        alert(`Payment successful! $${baseAmount.toFixed(2)} + $${feeAmount.toFixed(2)} fee = $${totalWithFee.toFixed(2)} charged.`);
+      } else {
+        alert(`Payment successful! $${baseAmount.toFixed(2)} charged.`);
+      }
+      
       setAmount('');
+      setIncludeFee(false);
       setCurrentPaymentIntent(null);
     } catch (error) {
       console.error('Payment failed:', error);
@@ -253,8 +268,8 @@ export default function StripeTerminal() {
       <h2 className="text-2xl font-bold mb-4 text-purple-700">Stripe Terminal</h2>
       
       {/* Amount Input */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">Amount to Charge ($)</label>
+      <div className="mb-4">
+        <label className="block text-sm font-medium mb-2">Base Amount ($)</label>
         <input
           type="number"
           step="0.01"
@@ -262,8 +277,49 @@ export default function StripeTerminal() {
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="0.00"
-          className="w-full p-3 border rounded-lg text-lg"
+          className="w-full p-3 border rounded-lg text-lg mb-3"
         />
+        
+        {/* 3% Fee Option */}
+        <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="includeFee"
+              checked={includeFee}
+              onChange={(e) => setIncludeFee(e.target.checked)}
+              className="w-4 h-4 text-purple-600 rounded"
+            />
+            <label htmlFor="includeFee" className="text-sm font-medium">
+              Add 3% processing fee
+            </label>
+          </div>
+          {includeFee && amount && (
+            <span className="text-sm text-gray-600">
+              +${feeAmount.toFixed(2)}
+            </span>
+          )}
+        </div>
+        
+        {/* Amount Summary */}
+        {amount && (
+          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex justify-between text-sm">
+              <span>Base amount:</span>
+              <span>${baseAmount.toFixed(2)}</span>
+            </div>
+            {includeFee && (
+              <div className="flex justify-between text-sm">
+                <span>Processing fee (3%):</span>
+                <span>+${feeAmount.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-semibold border-t border-blue-200 pt-2 mt-2">
+              <span>Total to charge:</span>
+              <span>${displayAmount.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Reader Connection */}
@@ -319,7 +375,7 @@ export default function StripeTerminal() {
           disabled={!reader || !amount || isLoading}
           className="w-full bg-green-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-green-700 transition"
         >
-          {isLoading ? 'Processing...' : `Charge $${amount || '0.00'}`}
+          {isLoading ? 'Processing...' : `Charge $${displayAmount.toFixed(2) || '0.00'}`}
         </button>
         
         {/* Cancel Button - Only show when payment is in progress */}
