@@ -12,13 +12,37 @@ export default function StripeTerminal() {
   const [initError, setInitError] = useState(null);
   const [currentPaymentIntent, setCurrentPaymentIntent] = useState(null);
   const [includeFee, setIncludeFee] = useState(false);
+  const [discount, setDiscount] = useState(0); // 0 = no discount
+  const [customDiscount, setCustomDiscount] = useState('');
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
-  // Calculate amounts with fee
+  // Calculate amounts with discount applied first, then fee
   const baseAmount = parseFloat(amount) || 0;
-  const feeAmount = baseAmount * 0.03;
-  const totalWithFee = baseAmount + feeAmount;
-  const displayAmount = includeFee ? totalWithFee : baseAmount;
+  
+  // Determine which discount to use
+  const activeDiscount = showCustomInput && customDiscount ? parseFloat(customDiscount) : discount;
+  const discountAmount = baseAmount * (activeDiscount / 100);
+  const amountAfterDiscount = baseAmount - discountAmount;
+  const feeAmount = amountAfterDiscount * 0.03;
+  const totalWithFee = amountAfterDiscount + feeAmount;
+  
+  // Determine final display amount and charge amount
+  const displayAmount = includeFee ? totalWithFee : amountAfterDiscount;
   const finalChargeAmount = Math.round(displayAmount * 100); // Convert to cents
+
+  // Handle discount selection
+  const handleDiscountSelect = (discountValue) => {
+    setDiscount(discountValue);
+    setShowCustomInput(false);
+    setCustomDiscount('');
+  };
+
+  // Handle custom discount toggle
+  const handleCustomDiscountToggle = () => {
+    setShowCustomInput(true);
+    setDiscount(0);
+    setCustomDiscount('');
+  };
 
   useEffect(() => {
     const initializeTerminal = async () => {
@@ -220,15 +244,29 @@ export default function StripeTerminal() {
         throw new Error(confirmResult.error.message);
       }
 
-      // Show appropriate success message based on fee inclusion
-      if (includeFee) {
-        alert(`Payment successful! $${baseAmount.toFixed(2)} + $${feeAmount.toFixed(2)} fee = $${totalWithFee.toFixed(2)} charged.`);
+      // Show detailed success message
+      let successMessage = `Payment successful! `;
+      if (activeDiscount > 0) {
+        const discountLabel = showCustomInput ? `${activeDiscount}% (custom)` : `${activeDiscount}%`;
+        successMessage += `$${baseAmount.toFixed(2)} - $${discountAmount.toFixed(2)} (${discountLabel} discount) = $${amountAfterDiscount.toFixed(2)}`;
       } else {
-        alert(`Payment successful! $${baseAmount.toFixed(2)} charged.`);
+        successMessage += `$${baseAmount.toFixed(2)}`;
       }
       
+      if (includeFee) {
+        successMessage += ` + $${feeAmount.toFixed(2)} fee = $${totalWithFee.toFixed(2)} charged.`;
+      } else {
+        successMessage += ` charged.`;
+      }
+      
+      alert(successMessage);
+      
+      // Reset form
       setAmount('');
       setIncludeFee(false);
+      setDiscount(0);
+      setCustomDiscount('');
+      setShowCustomInput(false);
       setCurrentPaymentIntent(null);
     } catch (error) {
       console.error('Payment failed:', error);
@@ -238,6 +276,14 @@ export default function StripeTerminal() {
       setIsLoading(false);
     }
   };
+
+  // Discount options
+  const discountOptions = [
+    { value: 5, label: '5% Off' },
+    { value: 10, label: '10% Off' },
+    { value: 15, label: '15% Off' },
+    { value: 20, label: '20% Off' },
+  ];
 
   if (isInitializing) {
     return (
@@ -280,6 +326,64 @@ export default function StripeTerminal() {
           className="w-full p-3 border rounded-lg text-lg mb-3"
         />
         
+        {/* Discount Options */}
+        <div className="mb-3">
+          <label className="block text-sm font-medium mb-2">Discount</label>
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            {discountOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handleDiscountSelect(option.value)}
+                className={`p-2 border rounded-lg text-sm transition ${
+                  discount === option.value && !showCustomInput
+                    ? 'bg-purple-600 text-white border-purple-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+            <button
+              onClick={handleCustomDiscountToggle}
+              className={`p-2 border rounded-lg text-sm transition ${
+                showCustomInput
+                  ? 'bg-purple-600 text-white border-purple-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Custom %
+            </button>
+          </div>
+
+          {/* Custom Discount Input */}
+          {showCustomInput && (
+            <div className="flex items-center space-x-2 p-2 border rounded-lg bg-yellow-50">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                value={customDiscount}
+                onChange={(e) => setCustomDiscount(e.target.value)}
+                placeholder="Enter discount %"
+                className="flex-1 p-2 border rounded text-sm"
+              />
+              <span className="text-sm text-gray-600 whitespace-nowrap">% off</span>
+              <button
+                onClick={() => {
+                  setShowCustomInput(false);
+                  setCustomDiscount('');
+                  setDiscount(0);
+                }}
+                className="p-2 text-red-600 hover:bg-red-50 rounded"
+                title="Close custom discount"
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
+        
         {/* 3% Fee Option */}
         <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
           <div className="flex items-center space-x-2">
@@ -308,12 +412,31 @@ export default function StripeTerminal() {
               <span>Base amount:</span>
               <span>${baseAmount.toFixed(2)}</span>
             </div>
+            
+            {activeDiscount > 0 && (
+              <div className="flex justify-between text-sm text-green-600">
+                <span>
+                  Discount ({activeDiscount}%
+                  {showCustomInput && ' custom'}):
+                </span>
+                <span>-${discountAmount.toFixed(2)}</span>
+              </div>
+            )}
+            
+            {(activeDiscount > 0 || includeFee) && (
+              <div className="flex justify-between text-sm font-medium border-t border-blue-200 pt-1 mt-1">
+                <span>After discount:</span>
+                <span>${amountAfterDiscount.toFixed(2)}</span>
+              </div>
+            )}
+            
             {includeFee && (
               <div className="flex justify-between text-sm">
                 <span>Processing fee (3%):</span>
                 <span>+${feeAmount.toFixed(2)}</span>
               </div>
             )}
+            
             <div className="flex justify-between font-semibold border-t border-blue-200 pt-2 mt-2">
               <span>Total to charge:</span>
               <span>${displayAmount.toFixed(2)}</span>
