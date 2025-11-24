@@ -45,6 +45,22 @@ export default async function handler(req, res) {
     ? services.map((s) => s.serviceName || s.serviceVariationId || 'Unknown Service').join(', ')
     : 'None';
 
+
+  function formatServicesList() {
+    if (!Array.isArray(services) || services.length === 0) {
+      return 'None';
+    }
+    
+    return services.map(service => {
+      const serviceName = service.serviceName || service.serviceVariationId || 'Unknown Service';
+      const duration = service.durationMinutes || 60;
+      const quantity = service.quantity || 1;
+      return `• ${serviceName} (${duration} min) x${quantity}`;
+    }).join('\n');
+  }
+
+  const formattedServices = formatServicesList();
+
   // ✅ Configure transporter
   const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -82,8 +98,13 @@ export default async function handler(req, res) {
         }, 0);
         
         return totalMinutes * 60 * 1000; // Convert minutes to milliseconds
+        
       }
+
       
+
+      
+
       const totalDuration = calculateTotalDuration();
       const endTime = new Date(startTime.getTime() + totalDuration);
       
@@ -93,14 +114,30 @@ export default async function handler(req, res) {
       const event = {
         summary: `Appointment: ${firstName} ${lastName}`,
         description: `
-Client: ${firstName} ${lastName}
-Email: ${email}
-Phone: ${phone}
-Services: ${serviceList}
-Duration: ${totalMinutes} minutes
-Party Size: ${partySize || 1}
-Total: ${totalFormatted || 'N/A'}
-Note: ${note || 'None'}
+═══════════════════════════
+👤 CLIENT INFORMATION 👤
+═══════════════════════════
+NAME: ${firstName} ${lastName}
+EMAIL: ${email}
+PHONE: ${phone} 📞📞📞
+
+═══════════════════════════
+📅 APPOINTMENT DETAILS 📅
+═══════════════════════════
+DATE & TIME: ${appointmentDate}
+DURATION: ${totalMinutes} minutes
+PARTY SIZE: ${partySize || 1}
+TOTAL: ${totalFormatted || 'N/A'}
+
+═══════════════════════════
+💆 SERVICES BOOKED 💆
+═══════════════════════════
+${formattedServices}
+
+═══════════════════════════
+📝 NOTES 📝
+═══════════════════════════
+${note || 'None'}
         `.trim(),
         start: {
           dateTime: startTime.toISOString(),
@@ -149,7 +186,8 @@ Phone: ${phone}
 Party Size: ${partySize || 1}
 Date & Time: ${appointmentDate}
 Total: ${totalFormatted || 'N/A'}
-Services: ${serviceList}
+Services: 
+${formattedServices}
 Note: ${note || 'None'}
     `,
   };
