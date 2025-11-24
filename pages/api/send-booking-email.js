@@ -54,65 +54,86 @@ export default async function handler(req, res) {
     },
   });
 
-  // 🗓️ GOOGLE CALENDAR INTEGRATION
   async function addToGoogleCalendar() {
-  try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      },
-      scopes: ['https://www.googleapis.com/auth/calendar'],
-    });
-
-    const calendar = google.calendar({ version: 'v3', auth });
-    
-    const startTime = new Date(startAt);
-    const endTime = new Date(startTime.getTime() + (60 * 60 * 1000));
-    
-    const event = {
-      summary: `Appointment: ${firstName} ${lastName} - ${serviceList}`,
-      description: `
+    try {
+      const auth = new google.auth.GoogleAuth({
+        credentials: {
+          client_email: process.env.GOOGLE_CLIENT_EMAIL,
+          private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        },
+        scopes: ['https://www.googleapis.com/auth/calendar'],
+      });
+  
+      const calendar = google.calendar({ version: 'v3', auth });
+      
+      const startTime = new Date(startAt);
+      
+      // ✅ FIXED: Calculate actual duration from services
+      function calculateTotalDuration() {
+        if (!Array.isArray(services) || services.length === 0) {
+          return 60 * 60 * 1000; // Default 1 hour if no services
+        }
+        
+        // Sum up all service durations (convert minutes to milliseconds)
+        const totalMinutes = services.reduce((total, service) => {
+          // Use durationMinutes from your service data
+          const duration = service.durationMinutes || 60; // Default to 60 minutes
+          return total + duration;
+        }, 0);
+        
+        return totalMinutes * 60 * 1000; // Convert minutes to milliseconds
+      }
+      
+      const totalDuration = calculateTotalDuration();
+      const endTime = new Date(startTime.getTime() + totalDuration);
+      
+      // Calculate total minutes for display
+      const totalMinutes = totalDuration / (60 * 1000);
+      
+      const event = {
+        summary: `Appointment: ${firstName} ${lastName}`,
+        description: `
 Client: ${firstName} ${lastName}
 Email: ${email}
 Phone: ${phone}
 Services: ${serviceList}
+Duration: ${totalMinutes} minutes
 Party Size: ${partySize || 1}
 Total: ${totalFormatted || 'N/A'}
 Note: ${note || 'None'}
-      `.trim(),
-      start: {
-        dateTime: startTime.toISOString(),
-        timeZone: 'America/Chicago',
-      },
-      end: {
-        dateTime: endTime.toISOString(),
-        timeZone: 'America/Chicago',
-      },
-      // ❌ REMOVED attendees array
-      location: '2706 W Chicago Ave, Chicago, IL 60622',
-      reminders: {
-        useDefault: false,
-        overrides: [
-          { method: 'email', minutes: 24 * 60 },
-          { method: 'popup', minutes: 30 },
-        ],
-      },
-    };
-
-    const response = await calendar.events.insert({
-      calendarId: 'primary',
-      resource: event,
-      // ❌ REMOVED sendUpdates
-    });
-
-    console.log('Google Calendar event created:', response.data.htmlLink);
-    return response.data;
-  } catch (error) {
-    console.error('Error creating Google Calendar event:', error);
-    throw error;
+        `.trim(),
+        start: {
+          dateTime: startTime.toISOString(),
+          timeZone: 'America/Chicago',
+        },
+        end: {
+          dateTime: endTime.toISOString(),
+          timeZone: 'America/Chicago',
+        },
+        location: '2706 W Chicago Ave, Chicago, IL 60622',
+        colorId: '1',
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: 'email', minutes: 24 * 60 },
+            { method: 'popup', minutes: 30 },
+          ],
+        },
+      };
+  
+      const response = await calendar.events.insert({
+        calendarId: 'selena@sisterlavenderspa.com',
+        resource: event,
+      });
+  
+      console.log('Google Calendar event created with duration:', totalMinutes + ' minutes');
+      console.log('Event link:', response.data.htmlLink);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating Google Calendar event:', error);
+      throw error;
+    }
   }
-}
 
   // 📧 Email 1: Notification to YOU
   const notificationMail = {
