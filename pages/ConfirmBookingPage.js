@@ -86,6 +86,8 @@ export default function ConfirmBookingPage() {
             startAt: selectedSlot.startAt,
             locationId,
             totalFormatted,
+            partySize,
+            note // test notes are added or not
           }),
         });
 
