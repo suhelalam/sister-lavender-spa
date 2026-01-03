@@ -10,12 +10,12 @@ export default function Services() {
       description: 'Experience deep scalp relaxation with a rejuvenating head spa that promotes hair health, relieves tension, and enhances overall well-being.',
       link: '/services/head-spa',
     },
-    {
-      title: '🧘‍♀️ Head & Body Harmony Rituals',
-      image: '/images/massage.jpg',
-      description: 'Indulge in a full-body sensory experience that combines head and body treatments to restore balance, ease stress, and elevate inner peace.',
-      link: '/services/body-harmony',
-    },
+    // {
+    //   title: '🧘‍♀️ Head & Body Harmony Rituals',
+    //   image: '/images/massage.jpg',
+    //   description: 'Indulge in a full-body sensory experience that combines head and body treatments to restore balance, ease stress, and elevate inner peace.',
+    //   link: '/services/body-harmony',
+    // },
     {
       title: 'Body Massage Treatments',
       image: '/images/bodyMassage.jpg',
