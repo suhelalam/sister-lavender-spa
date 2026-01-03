@@ -4,7 +4,7 @@ export default async function handler(req, res) {
 
   const generateTimeSlots = (dateString) => {
     const slots = [];
-    const durationMinutes = 60;
+    const durationMinutes = 30;
     
     // Your timezone offset from UTC in hours (e.g., -5 for EST, -6 for CST, etc.)
     const timezoneOffset = -6; // ← CHANGE THIS TO YOUR OFFSET
