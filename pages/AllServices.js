@@ -1,67 +1,72 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useServices } from '../context/ServicesContext';
 import ServiceCard from '../components/ServiceCard';
-import { CATEGORY_NAMES } from '../constants/categories';
+import { serviceCategories } from '../lib/servicesData';
 
 export default function AllServices() {
-  const [services, setServices] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { services, loading } = useServices();
 
-  useEffect(() => {
-    async function fetchServices() {
-      try {
-        const res = await fetch('/api/services');
-        const rawText = await res.text();
-        const data = JSON.parse(rawText);
-
-        if (data.success) {
-          setServices(data.data);
-        } else {
-          throw new Error(data.error || "API request failed");
-        }
-      } catch (err) {
-        console.error("Fetch error:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchServices();
-  }, []);
-
-  if (loading)
+  if (loading) {
     return (
       <div className="flex justify-center py-10">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-purple-600" />
       </div>
     );
+  }
 
-  if (error) return <p className="text-red-500">Error: {error}</p>;
+  // Create a map of services by category slug
+  const servicesByCategorySlug = {};
+  
+  // Initialize with all categories
+  serviceCategories.forEach(cat => {
+    servicesByCategorySlug[cat.slug] = [];
+  });
 
-  // Group by category_id
-  const servicesByCategory = services.reduce((acc, service) => {
-    const catId = service.category_id || 'uncategorized';
-    if (!acc[catId]) acc[catId] = [];
-    acc[catId].push(service);
-    return acc;
-  }, {});
+  // Group services by their category (matching by title)
+  services.forEach(service => {
+    // Find which category this service belongs to
+    const category = serviceCategories.find(cat => 
+      cat.title.includes(service.category) || service.category.includes(cat.title)
+    );
+    
+    if (category) {
+      servicesByCategorySlug[category.slug].push(service);
+    }
+  });
 
   return (
-    <div className="space-y-10">
-      {Object.entries(servicesByCategory).map(([categoryId, services]) => (
-        <div key={categoryId}>
-          <h2 className="text-2xl font-bold text-purple-700 mb-4">
-            {CATEGORY_NAMES[categoryId] || 'Uncategorized'}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {services.map((service) => (
-              <ServiceCard key={service.id} service={service} />
-            ))}
-          </div>
-        </div>
-      ))}
+    <div className="max-w-6xl mx-auto px-4 py-10">
+      <h1 className="text-3xl sm:text-4xl font-bold mb-10 text-center">All Services</h1>
+      
+      <div className="space-y-12">
+        {serviceCategories.map((category) => {
+          const categoryServices = servicesByCategorySlug[category.slug] || [];
+          
+          if (categoryServices.length === 0) return null;
+          
+          return (
+            <section key={category.slug} className="space-y-6">
+              <div className="flex items-center gap-4 mb-2">
+                <h2 className="text-2xl font-bold text-purple-700">
+                  {category.title}
+                </h2>
+                <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                  {categoryServices.length} service{categoryServices.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              
+              <p className="text-gray-600 mb-4">{category.description}</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {categoryServices.map((service) => (
+                  <ServiceCard key={service.id} service={service} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }
