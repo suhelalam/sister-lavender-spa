@@ -80,7 +80,7 @@ export default function ConfirmBookingPage() {
               serviceVariationId: item.id,
               serviceName: item.name,
               serviceVariationVersion: item.version,
-              durationMinutes: item.durationMinutes || 30, // optional
+              durationMinutes: Math.round(item.duration / 60000) || 30, // optional
               quantity: partySize,
             })),
             startAt: selectedSlot.startAt,

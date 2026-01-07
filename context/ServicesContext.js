@@ -1,92 +1,124 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "../lib/firebase";
+'use client';
+
+import { createContext, useContext, useState, useEffect } from "react";
+import { allServices } from "../lib/servicesData";
 
 const ServicesContext = createContext();
 
 export const ServicesProvider = ({ children }) => {
   const [services, setServices] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const fetchServices = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, "services"));
-        const allServices = [];
-
-        snapshot.forEach((doc) => {
-          const categoryName = doc.id;
-          const data = doc.data();
-          
-          console.log("Document ID:", doc.id, "Data:", data);
-          
-          // Check if the document has an 'items' field
-          if (data.items && Array.isArray(data.items)) {
-            // Process items array
-            data.items.forEach((item) => {
-              // If the item is a string, try to parse it as JSON
-              if (typeof item === 'string') {
-                try {
-                  const service = JSON.parse(item);
-                  allServices.push({
-                    ...service,
-                    category: categoryName,
-                  });
-                } catch (e) {
-                  console.error("Error parsing JSON:", e, "Item:", item);
-                }
-              } else if (typeof item === 'object') {
-                // If it's already an object, use it directly
-                allServices.push({
-                  ...item,
-                  category: categoryName,
-                });
-              }
-            });
-          } else {
-            // Check if the document contains service objects directly
-            Object.entries(data).forEach(([key, value]) => {
-              // Skip Firestore metadata fields
-              if (key.startsWith('_')) return;
-              
-              // If the value is a string that looks like JSON, try to parse it
-              if (typeof value === 'string' && (value.includes('{') || value.includes('['))) {
-                try {
-                  const service = JSON.parse(value);
-                  allServices.push({
-                    ...service,
-                    id: key,
-                    category: categoryName,
-                  });
-                } catch (e) {
-                  console.error("Error parsing JSON:", e, "Value:", value);
-                }
-              } else if (typeof value === 'object' && value !== null) {
-                // If it's already an object, use it directly
-                allServices.push({
-                  ...value,
-                  id: key,
-                  category: categoryName,
-                });
-              }
-            });
-          }
-        });
-
-        console.log("All services fetched from Firebase:", allServices);
-        setServices(allServices);
-      } catch (err) {
-        console.error("Error fetching services:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchServices();
+    // Load from localStorage if available, otherwise use default data
+    const savedServices = localStorage.getItem('spaServices');
+    if (savedServices) {
+      setServices(JSON.parse(savedServices));
+    } else {
+      setServices(allServices);
+      localStorage.setItem('spaServices', JSON.stringify(allServices));
+    }
+    setLoading(false);
   }, []);
 
+  // Save to localStorage whenever services change
+  useEffect(() => {
+    if (services.length > 0) {
+      localStorage.setItem('spaServices', JSON.stringify(services));
+    }
+  }, [services]);
+
+  const addService = (newService) => {
+    if (!newService.id) {
+      const baseId = newService.name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+      let id = baseId;
+      let counter = 1;
+      
+      while (services.find(s => s.id === id)) {
+        id = `${baseId}-${counter}`;
+        counter++;
+      }
+      newService.id = id;
+    }
+
+    setServices(prev => [...prev, newService]);
+  };
+
+  const updateService = (id, updatedData) => {
+    setServices(prev => 
+      prev.map(service => 
+        service.id === id ? { ...service, ...updatedData } : service
+      )
+    );
+  };
+
+  const deleteService = (id) => {
+    setServices(prev => prev.filter(service => service.id !== id));
+  };
+
+  const addVariation = (serviceId, variation) => {
+    setServices(prev => 
+      prev.map(service => {
+        if (service.id === serviceId) {
+          const newVariation = {
+            ...variation,
+            id: variation.id || `${serviceId}-${variation.name.toLowerCase().replace(/\s+/g, '-')}`,
+            version: variation.version || 1
+          };
+          return {
+            ...service,
+            variations: [...(service.variations || []), newVariation]
+          };
+        }
+        return service;
+      })
+    );
+  };
+
+  const updateVariation = (serviceId, variationId, updatedData) => {
+    setServices(prev => 
+      prev.map(service => {
+        if (service.id === serviceId && service.variations) {
+          return {
+            ...service,
+            variations: service.variations.map(variation => 
+              variation.id === variationId 
+                ? { ...variation, ...updatedData }
+                : variation
+            )
+          };
+        }
+        return service;
+      })
+    );
+  };
+
+  const deleteVariation = (serviceId, variationId) => {
+    setServices(prev => 
+      prev.map(service => {
+        if (service.id === serviceId && service.variations) {
+          const filteredVariations = service.variations.filter(v => v.id !== variationId);
+          return {
+            ...service,
+            variations: filteredVariations.length > 0 ? filteredVariations : undefined
+          };
+        }
+        return service;
+      })
+    );
+  };
+
   return (
-    <ServicesContext.Provider value={{ services, loading }}>
+    <ServicesContext.Provider value={{ 
+      services, 
+      loading, 
+      addService, 
+      updateService, 
+      deleteService,
+      addVariation,
+      updateVariation,
+      deleteVariation
+    }}>
       {children}
     </ServicesContext.Provider>
   );

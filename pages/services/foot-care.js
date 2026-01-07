@@ -1,15 +1,15 @@
 'use client';
 
-import { ServicesProvider, useServices } from '../../context/ServicesContext';
+import { useServices } from '../../context/ServicesContext';
 import ServiceCard from '../../components/ServiceCard';
 
-function FootCarePage() {
+export default function FootCarePage() {
   const { services, loading } = useServices();
 
-  if (loading) return <p>Loading services...</p>;
+  if (loading) return <p className="text-center py-10">Loading services...</p>;
 
   const filtered = services.filter(
-    (service) => service.category === "Foot Care"
+    (service) => service.category === "Foot Care" // Note: matches the data structure
   );
 
   return (
@@ -17,23 +17,20 @@ function FootCarePage() {
       <h1 className="text-3xl sm:text-4xl font-bold mb-6 text-purple-700">
         Foot Care
       </h1>
+      <p className="text-gray-600 mb-8">
+        Pamper your feet with expert care—callus removal, exfoliation, 
+        and deep hydration for comfort, softness, and refreshed soles.
+      </p>
+      
       {filtered.length === 0 ? (
         <p className="text-gray-600">No services found in this category.</p>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((service, idx) => (
-            <ServiceCard key={idx} service={service} />
+          {filtered.map((service) => (
+            <ServiceCard key={service.id} service={service} />
           ))}
         </div>
       )}
     </div>
-  );
-}
-
-export default function FootCare() {
-  return (
-    <ServicesProvider>
-      <FootCarePage/>
-    </ServicesProvider>
   );
 }
