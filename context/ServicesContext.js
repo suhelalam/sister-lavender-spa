@@ -7,27 +7,20 @@ const ServicesContext = createContext();
 
 export const ServicesProvider = ({ children }) => {
   const [services, setServices] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load from localStorage if available, otherwise use default data
-    const savedServices = localStorage.getItem('spaServices');
-    if (savedServices) {
-      setServices(JSON.parse(savedServices));
-    } else {
-      setServices(allServices);
-      localStorage.setItem('spaServices', JSON.stringify(allServices));
-    }
+    // ALWAYS load fresh from the source file
+    console.log('Loading fresh services from servicesData.js');
+    setServices(allServices);
     setLoading(false);
+    
+    // Optional: Save to localStorage for cart/booking persistence ONLY
+    // But don't use it for displaying services
+    localStorage.setItem('spaServicesBackup', JSON.stringify(allServices));
   }, []);
 
-  // Save to localStorage whenever services change
-  useEffect(() => {
-    if (services.length > 0) {
-      localStorage.setItem('spaServices', JSON.stringify(services));
-    }
-  }, [services]);
-
+  // CRUD functions for admin (will only affect current session)
   const addService = (newService) => {
     if (!newService.id) {
       const baseId = newService.name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
@@ -42,6 +35,10 @@ export const ServicesProvider = ({ children }) => {
     }
 
     setServices(prev => [...prev, newService]);
+    
+    // Save admin changes to localStorage (temporary)
+    const updatedServices = [...services, newService];
+    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
   };
 
   const updateService = (id, updatedData) => {
@@ -50,12 +47,23 @@ export const ServicesProvider = ({ children }) => {
         service.id === id ? { ...service, ...updatedData } : service
       )
     );
+    
+    // Save to localStorage
+    const updatedServices = services.map(service => 
+      service.id === id ? { ...service, ...updatedData } : service
+    );
+    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
   };
 
   const deleteService = (id) => {
     setServices(prev => prev.filter(service => service.id !== id));
+    
+    // Save to localStorage
+    const updatedServices = services.filter(service => service.id !== id);
+    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
   };
 
+  // Variation functions
   const addVariation = (serviceId, variation) => {
     setServices(prev => 
       prev.map(service => {
@@ -65,14 +73,32 @@ export const ServicesProvider = ({ children }) => {
             id: variation.id || `${serviceId}-${variation.name.toLowerCase().replace(/\s+/g, '-')}`,
             version: variation.version || 1
           };
-          return {
+          const updatedService = {
             ...service,
             variations: [...(service.variations || []), newVariation]
           };
+          return updatedService;
         }
         return service;
       })
     );
+    
+    // Save to localStorage
+    const updatedServices = services.map(service => {
+      if (service.id === serviceId) {
+        const newVariation = {
+          ...variation,
+          id: variation.id || `${serviceId}-${variation.name.toLowerCase().replace(/\s+/g, '-')}`,
+          version: variation.version || 1
+        };
+        return {
+          ...service,
+          variations: [...(service.variations || []), newVariation]
+        };
+      }
+      return service;
+    });
+    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
   };
 
   const updateVariation = (serviceId, variationId, updatedData) => {
@@ -91,6 +117,22 @@ export const ServicesProvider = ({ children }) => {
         return service;
       })
     );
+    
+    // Save to localStorage
+    const updatedServices = services.map(service => {
+      if (service.id === serviceId && service.variations) {
+        return {
+          ...service,
+          variations: service.variations.map(variation => 
+            variation.id === variationId 
+              ? { ...variation, ...updatedData }
+              : variation
+          )
+        };
+      }
+      return service;
+    });
+    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
   };
 
   const deleteVariation = (serviceId, variationId) => {
@@ -106,6 +148,19 @@ export const ServicesProvider = ({ children }) => {
         return service;
       })
     );
+    
+    // Save to localStorage
+    const updatedServices = services.map(service => {
+      if (service.id === serviceId && service.variations) {
+        const filteredVariations = service.variations.filter(v => v.id !== variationId);
+        return {
+          ...service,
+          variations: filteredVariations.length > 0 ? filteredVariations : undefined
+        };
+      }
+      return service;
+    });
+    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
   };
 
   return (
