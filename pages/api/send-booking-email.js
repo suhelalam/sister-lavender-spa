@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
+import Stripe from 'stripe';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -17,7 +18,7 @@ export default async function handler(req, res) {
     note,
     totalFormatted,
   } = req.body || {};
-  
+
   const firstName = customer?.givenName;
   const lastName = customer?.familyName;
   const email = customer?.emailAddress;
@@ -30,33 +31,37 @@ export default async function handler(req, res) {
 
   // ✅ Build appointment date safely
   const appointmentDate = startAt
-  ? new Date(startAt).toLocaleString('en-US', { 
-      timeZone: 'America/Chicago',
-      month: 'numeric',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  : 'Not provided';
+    ? new Date(startAt).toLocaleString('en-US', {
+        timeZone: 'America/Chicago',
+        month: 'numeric',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : 'Not provided';
 
   // ✅ Build services list safely
   const serviceList = Array.isArray(services)
-    ? services.map((s) => s.serviceName || s.serviceVariationId || 'Unknown Service').join(', ')
+    ? services
+        .map((s) => s.serviceName || s.serviceVariationId || 'Unknown Service')
+        .join(', ')
     : 'None';
-
 
   function formatServicesList() {
     if (!Array.isArray(services) || services.length === 0) {
       return 'None';
     }
-    
-    return services.map(service => {
-      const serviceName = service.serviceName || service.serviceVariationId || 'Unknown Service';
-      const duration = service.durationMinutes || 60;
-      const quantity = service.quantity || 1;
-      return `• ${serviceName} (${duration} min) x${quantity}`;
-    }).join('\n');
+
+    return services
+      .map((service) => {
+        const serviceName =
+          service.serviceName || service.serviceVariationId || 'Unknown Service';
+        const duration = service.durationMinutes || 60;
+        const quantity = service.quantity || 1;
+        return `• ${serviceName} (${duration} min) x${quantity}`;
+      })
+      .join('\n');
   }
 
   const formattedServices = formatServicesList();
@@ -79,38 +84,33 @@ export default async function handler(req, res) {
         },
         scopes: ['https://www.googleapis.com/auth/calendar'],
       });
-  
+
       const calendar = google.calendar({ version: 'v3', auth });
-      
+
       const startTime = new Date(startAt);
-      
+
       // ✅ FIXED: Calculate actual duration from services
       function calculateTotalDuration() {
         if (!Array.isArray(services) || services.length === 0) {
           return 60 * 60 * 1000; // Default 1 hour if no services
         }
-        
+
         // Sum up all service durations (convert minutes to milliseconds)
         const totalMinutes = services.reduce((total, service) => {
           // Use durationMinutes from your service data
           const duration = service.durationMinutes || 60; // Default to 60 minutes
           return total + duration;
         }, 0);
-        
+
         return totalMinutes * 60 * 1000; // Convert minutes to milliseconds
-        
       }
-
-      
-
-      
 
       const totalDuration = calculateTotalDuration();
       const endTime = new Date(startTime.getTime() + totalDuration);
-      
+
       // Calculate total minutes for display
       const totalMinutes = totalDuration / (60 * 1000);
-      
+
       const event = {
         summary: `Appointment: ${firstName} ${lastName}`,
         description: `
@@ -157,13 +157,16 @@ ${note || 'None'}
           ],
         },
       };
-  
+
       const response = await calendar.events.insert({
         calendarId: 'selena@sisterlavenderspa.com',
         resource: event,
       });
-  
-      console.log('Google Calendar event created with duration:', totalMinutes + ' minutes');
+
+      console.log(
+        'Google Calendar event created with duration:',
+        totalMinutes + ' minutes'
+      );
       console.log('Event link:', response.data.htmlLink);
       return response.data;
     } catch (error) {
@@ -260,24 +263,55 @@ Thank you for choosing us!
 Sister Lavender Spa
 Phone: (312) 900-3131
 Address: 2706 W Chicago Ave, Chicago, IL 60622
-    `
+    `,
   };
+
+  // ✅ Stripe: create or reuse customer (no DB)
+  async function upsertStripeCustomer() {
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2024-06-20',
+    });
+
+    // Try to find existing customer by email
+    const existing = await stripe.customers.list({ email, limit: 1 });
+    if (existing.data && existing.data.length > 0) {
+      return existing.data[0];
+    }
+
+    // Create new customer
+    return await stripe.customers.create({
+      email,
+      name: `${firstName} ${lastName}`,
+      phone,
+      metadata: {
+        partySize: String(partySize || 1),
+        startAt: String(startAt),
+        totalFormatted: String(totalFormatted || ''),
+        services: String(serviceList || ''),
+        note: String(note || ''),
+      },
+    });
+  }
 
   try {
     // 🗓️ 1. Add to Google Calendar
     const calendarEvent = await addToGoogleCalendar();
-    
+
     // 📧 2. Send both emails
     await transporter.sendMail(notificationMail);
     await transporter.sendMail(confirmationMail);
-    
-    return res.status(200).json({ 
-      success: true, 
+
+    // 💳 3. Add / reuse Stripe customer
+    const stripeCustomer = await upsertStripeCustomer();
+
+    return res.status(200).json({
+      success: true,
       message: 'Booking created in calendar and emails sent successfully',
       calendarEvent: {
         id: calendarEvent.id,
-        link: calendarEvent.htmlLink
-      }
+        link: calendarEvent.htmlLink,
+      },
+      stripeCustomerId: stripeCustomer.id,
     });
   } catch (err) {
     console.error('Error processing booking:', err);
