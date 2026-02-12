@@ -15,6 +15,7 @@ export default function StripeTerminal() {
   const [couponsError, setCouponsError] = useState(null);
   const [loadingStripeItems, setLoadingStripeItems] = useState(true);
   const [stripeItemsError, setStripeItemsError] = useState(null);
+  const [cartPreviewShown, setCartPreviewShown] = useState(false);
 
   // Track the active PI so we can cancel it
   const [activePaymentIntentId, setActivePaymentIntentId] = useState(null);
@@ -27,7 +28,7 @@ export default function StripeTerminal() {
   const [loadingReaders, setLoadingReaders] = useState(true);
   const [readersError, setReadersError] = useState(null);
 
-  const [includeFee, setIncludeFee] = useState(false);
+  const [includeFee, setIncludeFee] = useState(true);
   const selectedCoupon = coupons.find((coupon) => coupon.id === selectedCouponId) || null;
 
   const filteredStripeItems = useMemo(() => {
@@ -57,11 +58,11 @@ export default function StripeTerminal() {
   const discountAmount = Math.min(baseAmount, percentDiscountAmount + fixedDiscountAmount);
   const amountAfterDiscount = baseAmount - discountAmount;
 
-  const feeAmount = amountAfterDiscount * 0.03;
-  const totalWithFee = amountAfterDiscount + feeAmount;
-
-  const displayAmount = includeFee ? totalWithFee : amountAfterDiscount;
-  const finalChargeAmount = Math.round(displayAmount * 100);
+  const amountAfterDiscountCents = Math.max(0, Math.round(amountAfterDiscount * 100));
+  const feeAmountCents = includeFee ? Math.max(0, Math.round(amountAfterDiscountCents * 0.03)) : 0;
+  const finalChargeAmount = amountAfterDiscountCents + feeAmountCents;
+  const feeAmount = feeAmountCents / 100;
+  const displayAmount = finalChargeAmount / 100;
 
   const refreshStripeItems = async () => {
     setLoadingStripeItems(true);
@@ -128,13 +129,18 @@ export default function StripeTerminal() {
     }
   }, [filteredStripeItems, selectedStripeItemId]);
 
+  useEffect(() => {
+    setCartPreviewShown(false);
+  }, [selectedServices, selectedReaderId, includeFee, selectedCouponId, amount]);
+
   const resetForm = () => {
     setAmount('');
     setSelectedStripeItemId('');
     setProductSearch('');
     setSelectedServices([]);
-    setIncludeFee(false);
+    setIncludeFee(true);
     setSelectedCouponId('');
+    setCartPreviewShown(false);
   };
 
   const addSelectedService = () => {
@@ -165,6 +171,29 @@ export default function StripeTerminal() {
 
   // ----- Cancel server-driven payment -----
   const cancelPayment = async () => {
+    if (!activePaymentIntentId && cartPreviewShown) {
+      setIsCanceling(true);
+      try {
+        const clearResp = await fetch('/api/clear-reader-display', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reader_id: activeReaderId || selectedReaderId }),
+        });
+
+        if (!clearResp.ok) throw new Error(await clearResp.text());
+        await clearResp.json();
+
+        setCartPreviewShown(false);
+        alert('Reader cart cleared.');
+      } catch (error) {
+        console.error('Clear cart failed:', error);
+        alert('Clear cart failed: ' + (error.message || String(error)));
+      } finally {
+        setIsCanceling(false);
+      }
+      return;
+    }
+
     if (!activePaymentIntentId) return;
 
     setIsCanceling(true);
@@ -209,11 +238,66 @@ export default function StripeTerminal() {
 
     setIsLoading(true);
     try {
+      const selectedCoupon = coupons.find((coupon) => coupon.id === selectedCouponId) || null;
+      const baseServiceLines =
+        selectedServices.length > 0
+          ? selectedServices.map((service) => ({
+              name: service.name,
+              amount: Math.max(0, Math.round(Number(service.amount || 0))),
+              quantity: Math.max(1, Math.round(Number(service.quantity || 1))),
+            }))
+          : [
+              {
+                name: 'Custom amount',
+                amount: Math.max(0, Math.round(baseAmount * 100)),
+                quantity: 1,
+              },
+            ];
+
+      const servicesForCharge =
+        feeAmountCents > 0
+          ? [
+              ...baseServiceLines,
+              {
+                name: 'Processing fee (3%)',
+                amount: feeAmountCents,
+                quantity: 1,
+              },
+            ]
+          : baseServiceLines;
+
+      if (selectedServices.length > 0 && !cartPreviewShown) {
+        const displayResp = await fetch('/api/display-cart-on-reader', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            reader_id: selectedReaderId,
+            amount: finalChargeAmount,
+            services: servicesForCharge,
+          }),
+        });
+
+        if (!displayResp.ok) throw new Error(await displayResp.text());
+        const displayData = await displayResp.json();
+        if (!displayData.ok) {
+          throw new Error(displayData.reader_display_error || 'Failed to show services on reader');
+        }
+
+        setCartPreviewShown(true);
+        alert('Services displayed on reader. Press charge again to start payment.');
+        return;
+      }
+
       // 1) Create PI
       const piResp = await fetch('/api/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: finalChargeAmount, currency: 'usd' }),
+        body: JSON.stringify({
+          amount: finalChargeAmount,
+          currency: 'usd',
+          services: servicesForCharge,
+          coupon_code: selectedCoupon?.code || '',
+        }),
       });
 
       if (!piResp.ok) throw new Error(await piResp.text());
@@ -234,6 +318,8 @@ export default function StripeTerminal() {
         body: JSON.stringify({
           reader_id: selectedReaderId,
           payment_intent_id: piData.payment_intent_id,
+          amount: finalChargeAmount,
+          services: servicesForCharge,
         }),
       });
 
@@ -404,22 +490,10 @@ export default function StripeTerminal() {
           )}
         </div>
 
-        {/* 3% Fee Option */}
+        {/* 3% Fee Always Included */}
         <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="includeFee"
-              checked={includeFee}
-              onChange={(e) => setIncludeFee(e.target.checked)}
-              className="w-4 h-4 text-purple-600 rounded"
-              disabled={isLoading || isCanceling}
-            />
-            <label htmlFor="includeFee" className="text-sm font-medium">
-              Add 3% processing fee
-            </label>
-          </div>
-          {includeFee && baseAmount > 0 && <span className="text-sm text-gray-600">+${feeAmount.toFixed(2)}</span>}
+          <span className="text-sm font-medium">Card processing fee (3%)</span>
+          {baseAmount > 0 && <span className="text-sm text-gray-600">+${feeAmount.toFixed(2)}</span>}
         </div>
 
         {/* Amount Summary */}
@@ -524,17 +598,21 @@ export default function StripeTerminal() {
           disabled={!selectedReaderId || baseAmount <= 0 || isLoading || isCanceling}
           className="w-full bg-green-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-green-700 transition"
         >
-          {isLoading ? 'Sending to reader...' : `Charge $${displayAmount.toFixed(2) || '0.00'}`}
+          {isLoading
+            ? 'Sending to reader...'
+            : selectedServices.length > 0 && !cartPreviewShown
+              ? `Show Services on Reader ($${displayAmount.toFixed(2)})`
+              : `Charge $${displayAmount.toFixed(2) || '0.00'}`}
         </button>
 
         {/* Cancel Button - show when we have an active PI to cancel */}
-        {activePaymentIntentId && (
+        {(activePaymentIntentId || cartPreviewShown) && (
           <button
             onClick={cancelPayment}
             disabled={isCanceling}
             className="w-full bg-red-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-red-700 transition"
           >
-            {isCanceling ? 'Canceling...' : 'Cancel Payment'}
+            {isCanceling ? 'Canceling...' : cartPreviewShown && !activePaymentIntentId ? 'Clear Reader Cart' : 'Cancel Payment'}
           </button>
         )}
       </div>

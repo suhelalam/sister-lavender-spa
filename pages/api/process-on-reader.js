@@ -14,8 +14,17 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing reader_id or payment_intent_id' });
     }
 
+    const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent_id);
+    const amountEligible = Math.max(0, Math.round(Number(paymentIntent?.amount || 0)));
+
     const reader = await stripe.terminal.readers.processPaymentIntent(reader_id, {
       payment_intent: payment_intent_id,
+      process_config: {
+        skip_tipping: false,
+        tipping: {
+          amount_eligible: amountEligible,
+        },
+      },
     });
 
     res.status(200).json({ ok: true, reader });
