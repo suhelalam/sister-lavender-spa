@@ -30,11 +30,28 @@ function sanitizeAnnouncements(input) {
 
 function getFirestoreClient() {
   const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL || process.env.GOOGLE_CLIENT_EMAIL;
-  const privateKey = (
-    process.env.FIREBASE_ADMIN_PRIVATE_KEY ||
-    process.env.GOOGLE_PRIVATE_KEY ||
-    ""
-  ).replace(/\\n/g, "\n");
+  const normalizePrivateKey = (rawValue) => {
+    if (!rawValue) return "";
+
+    let key = String(rawValue).trim();
+
+    // Remove wrapping quotes if env provider preserved them.
+    if (
+      (key.startsWith('"') && key.endsWith('"')) ||
+      (key.startsWith("'") && key.endsWith("'"))
+    ) {
+      key = key.slice(1, -1);
+    }
+
+    // Convert escaped newlines from env vars into real newlines.
+    key = key.replace(/\\n/g, "\n").trim();
+
+    return key;
+  };
+
+  const privateKey = normalizePrivateKey(
+    process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.GOOGLE_PRIVATE_KEY || ""
+  );
 
   if (!clientEmail || !privateKey) {
     throw new Error(
