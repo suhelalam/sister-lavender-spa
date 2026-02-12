@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 export default function StripeTerminal() {
   const [amount, setAmount] = useState('');
+  const [additionalCharge, setAdditionalCharge] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [stripeItems, setStripeItems] = useState([]);
   const [selectedStripeItemId, setSelectedStripeItemId] = useState('');
@@ -45,9 +46,12 @@ export default function StripeTerminal() {
     (sum, item) => sum + (item.amount / 100) * item.quantity,
     0
   );
+  const manualAmount = parseFloat(amount) || 0;
+  const additionalChargeAmount = parseFloat(additionalCharge) || 0;
+  const primaryAmount = selectedServices.length > 0 ? selectedServicesAmount : manualAmount;
 
   // ----- Amount math -----
-  const baseAmount = selectedServices.length > 0 ? selectedServicesAmount : parseFloat(amount) || 0;
+  const baseAmount = primaryAmount + additionalChargeAmount;
 
   const percentDiscountAmount =
     selectedCoupon?.discount_type === 'percent'
@@ -131,10 +135,11 @@ export default function StripeTerminal() {
 
   useEffect(() => {
     setCartPreviewShown(false);
-  }, [selectedServices, selectedReaderId, includeFee, selectedCouponId, amount]);
+  }, [selectedServices, selectedReaderId, includeFee, selectedCouponId, amount, additionalCharge]);
 
   const resetForm = () => {
     setAmount('');
+    setAdditionalCharge('');
     setSelectedStripeItemId('');
     setProductSearch('');
     setSelectedServices([]);
@@ -246,25 +251,40 @@ export default function StripeTerminal() {
               amount: Math.max(0, Math.round(Number(service.amount || 0))),
               quantity: Math.max(1, Math.round(Number(service.quantity || 1))),
             }))
-          : [
+          : manualAmount > 0
+            ? [
+                {
+                  name: 'Custom amount',
+                  amount: Math.max(0, Math.round(manualAmount * 100)),
+                  quantity: 1,
+                },
+              ]
+            : [];
+
+      const additionalChargeCents = Math.max(0, Math.round(additionalChargeAmount * 100));
+      const linesWithCustomCharge =
+        additionalChargeCents > 0
+          ? [
+              ...baseServiceLines,
               {
-                name: 'Custom amount',
-                amount: Math.max(0, Math.round(baseAmount * 100)),
+                name: 'Custom add-on',
+                amount: additionalChargeCents,
                 quantity: 1,
               },
-            ];
+            ]
+          : baseServiceLines;
 
       const servicesForCharge =
         feeAmountCents > 0
           ? [
-              ...baseServiceLines,
+              ...linesWithCustomCharge,
               {
                 name: 'Processing fee (3%)',
                 amount: feeAmountCents,
                 quantity: 1,
               },
             ]
-          : baseServiceLines;
+          : linesWithCustomCharge;
 
       if (selectedServices.length > 0 && !cartPreviewShown) {
         const displayResp = await fetch('/api/display-cart-on-reader', {
@@ -455,6 +475,18 @@ export default function StripeTerminal() {
           disabled={isLoading || isCanceling || selectedServices.length > 0}
         />
 
+        <label className="block text-sm font-medium mb-2">Additional Custom Charge ($)</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={additionalCharge}
+          onChange={(e) => setAdditionalCharge(e.target.value)}
+          placeholder="0.00"
+          className="w-full p-3 border rounded-lg text-lg mb-3"
+          disabled={isLoading || isCanceling}
+        />
+
         {/* Discount Options */}
         <div className="mb-3">
           <label className="block text-sm font-medium mb-2">Coupon</label>
@@ -500,9 +532,21 @@ export default function StripeTerminal() {
         {baseAmount > 0 && (
           <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex justify-between text-sm">
-              <span>Base amount:</span>
-              <span>${baseAmount.toFixed(2)}</span>
+              <span>Services/custom amount:</span>
+              <span>${primaryAmount.toFixed(2)}</span>
             </div>
+            {additionalChargeAmount > 0 && (
+              <div className="flex justify-between text-sm">
+                <span>Custom add-on:</span>
+                <span>${additionalChargeAmount.toFixed(2)}</span>
+              </div>
+            )}
+            {additionalChargeAmount > 0 && (
+              <div className="flex justify-between text-sm font-medium border-t border-blue-200 pt-1 mt-1">
+                <span>Subtotal:</span>
+                <span>${baseAmount.toFixed(2)}</span>
+              </div>
+            )}
 
             {selectedCoupon && discountAmount > 0 && (
               <div className="flex justify-between text-sm text-green-600">
