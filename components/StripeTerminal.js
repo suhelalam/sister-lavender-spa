@@ -5,6 +5,16 @@ import { useEffect, useMemo, useState } from 'react';
 export default function StripeTerminal() {
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [stripeItems, setStripeItems] = useState([]);
+  const [selectedStripeItemId, setSelectedStripeItemId] = useState('');
+  const [productSearch, setProductSearch] = useState('');
+  const [selectedServices, setSelectedServices] = useState([]);
+  const [coupons, setCoupons] = useState([]);
+  const [selectedCouponId, setSelectedCouponId] = useState('');
+  const [loadingCoupons, setLoadingCoupons] = useState(true);
+  const [couponsError, setCouponsError] = useState(null);
+  const [loadingStripeItems, setLoadingStripeItems] = useState(true);
+  const [stripeItemsError, setStripeItemsError] = useState(null);
 
   // Track the active PI so we can cancel it
   const [activePaymentIntentId, setActivePaymentIntentId] = useState(null);
@@ -18,15 +28,33 @@ export default function StripeTerminal() {
   const [readersError, setReadersError] = useState(null);
 
   const [includeFee, setIncludeFee] = useState(false);
-  const [discount, setDiscount] = useState(0);
-  const [customDiscount, setCustomDiscount] = useState('');
-  const [showCustomInput, setShowCustomInput] = useState(false);
+  const selectedCoupon = coupons.find((coupon) => coupon.id === selectedCouponId) || null;
 
-  // ----- Amount math (unchanged from your logic) -----
-  const baseAmount = parseFloat(amount) || 0;
+  const filteredStripeItems = useMemo(() => {
+    const term = productSearch.trim().toLowerCase();
+    if (!term) return stripeItems;
+    return stripeItems.filter(
+      (item) =>
+        item.label.toLowerCase().includes(term) ||
+        item.name.toLowerCase().includes(term)
+    );
+  }, [stripeItems, productSearch]);
 
-  const activeDiscount = showCustomInput && customDiscount ? parseFloat(customDiscount) : discount;
-  const discountAmount = baseAmount * (activeDiscount / 100);
+  const selectedServicesAmount = selectedServices.reduce(
+    (sum, item) => sum + (item.amount / 100) * item.quantity,
+    0
+  );
+
+  // ----- Amount math -----
+  const baseAmount = selectedServices.length > 0 ? selectedServicesAmount : parseFloat(amount) || 0;
+
+  const percentDiscountAmount =
+    selectedCoupon?.discount_type === 'percent'
+      ? baseAmount * ((selectedCoupon.percent_off || 0) / 100)
+      : 0;
+  const fixedDiscountAmount =
+    selectedCoupon?.discount_type === 'amount' ? (selectedCoupon.amount_off || 0) / 100 : 0;
+  const discountAmount = Math.min(baseAmount, percentDiscountAmount + fixedDiscountAmount);
   const amountAfterDiscount = baseAmount - discountAmount;
 
   const feeAmount = amountAfterDiscount * 0.03;
@@ -35,26 +63,34 @@ export default function StripeTerminal() {
   const displayAmount = includeFee ? totalWithFee : amountAfterDiscount;
   const finalChargeAmount = Math.round(displayAmount * 100);
 
-  const discountOptions = useMemo(
-    () => [
-      { value: 5, label: '5% Off' },
-      { value: 10, label: '10% Off' },
-      { value: 15, label: '15% Off' },
-      { value: 20, label: '20% Off' },
-    ],
-    []
-  );
-
-  const handleDiscountSelect = (discountValue) => {
-    setDiscount(discountValue);
-    setShowCustomInput(false);
-    setCustomDiscount('');
+  const refreshStripeItems = async () => {
+    setLoadingStripeItems(true);
+    setStripeItemsError(null);
+    try {
+      const r = await fetch('/api/list-terminal-products');
+      if (!r.ok) throw new Error(await r.text());
+      const data = await r.json();
+      setStripeItems(data.items || []);
+    } catch (e) {
+      setStripeItemsError(e.message || 'Failed to load Stripe products');
+    } finally {
+      setLoadingStripeItems(false);
+    }
   };
 
-  const handleCustomDiscountToggle = () => {
-    setShowCustomInput(true);
-    setDiscount(0);
-    setCustomDiscount('');
+  const refreshCoupons = async () => {
+    setLoadingCoupons(true);
+    setCouponsError(null);
+    try {
+      const r = await fetch('/api/list-terminal-coupons');
+      if (!r.ok) throw new Error(await r.text());
+      const data = await r.json();
+      setCoupons(data.coupons || []);
+    } catch (e) {
+      setCouponsError(e.message || 'Failed to load coupons');
+    } finally {
+      setLoadingCoupons(false);
+    }
   };
 
   // ----- Load readers from backend -----
@@ -81,15 +117,50 @@ export default function StripeTerminal() {
 
   useEffect(() => {
     refreshReaders();
+    refreshStripeItems();
+    refreshCoupons();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!selectedStripeItemId && filteredStripeItems.length > 0) {
+      setSelectedStripeItemId(filteredStripeItems[0].id);
+    }
+  }, [filteredStripeItems, selectedStripeItemId]);
+
   const resetForm = () => {
     setAmount('');
+    setSelectedStripeItemId('');
+    setProductSearch('');
+    setSelectedServices([]);
     setIncludeFee(false);
-    setDiscount(0);
-    setCustomDiscount('');
-    setShowCustomInput(false);
+    setSelectedCouponId('');
+  };
+
+  const addSelectedService = () => {
+    if (!selectedStripeItemId) return;
+
+    const matched = stripeItems.find((item) => item.id === selectedStripeItemId);
+    if (!matched) return;
+
+    setSelectedServices((prev) => {
+      const existing = prev.find((service) => service.id === matched.id);
+      if (existing) {
+        return prev.map((service) =>
+          service.id === matched.id ? { ...service, quantity: service.quantity + 1 } : service
+        );
+      }
+      return [...prev, { ...matched, quantity: 1 }];
+    });
+  };
+
+  const updateServiceQuantity = (id, nextQuantity) => {
+    setSelectedServices((prev) => {
+      if (nextQuantity <= 0) return prev.filter((service) => service.id !== id);
+      return prev.map((service) =>
+        service.id === id ? { ...service, quantity: nextQuantity } : service
+      );
+    });
   };
 
   // ----- Cancel server-driven payment -----
@@ -131,7 +202,7 @@ export default function StripeTerminal() {
       alert('Please select a reader first');
       return;
     }
-    if (!amount || baseAmount <= 0) {
+    if (baseAmount <= 0) {
       alert('Please enter a valid amount');
       return;
     }
@@ -191,6 +262,101 @@ export default function StripeTerminal() {
 
       {/* Amount Input */}
       <div className="mb-4">
+        <label className="block text-sm font-medium mb-2">Select Service (Stripe)</label>
+        {loadingStripeItems ? (
+          <div className="p-3 border rounded-lg bg-gray-50 text-sm text-gray-600 mb-3">
+            Loading Stripe products...
+          </div>
+        ) : stripeItemsError ? (
+          <div className="p-3 border rounded-lg bg-red-50 border-red-200 text-sm mb-3">
+            <p className="text-red-600">Failed to load products: {stripeItemsError}</p>
+            <button
+              onClick={refreshStripeItems}
+              className="mt-2 bg-purple-600 text-white px-3 py-2 rounded text-xs"
+              disabled={isLoading || isCanceling}
+            >
+              Retry Products
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2 mb-3">
+            <input
+              type="text"
+              value={productSearch}
+              onChange={(e) => {
+                setProductSearch(e.target.value);
+                setSelectedStripeItemId('');
+              }}
+              placeholder="Search services..."
+              className="w-full p-3 border rounded-lg"
+              disabled={isLoading || isCanceling}
+            />
+            <select
+              value={selectedStripeItemId}
+              onChange={(e) => {
+                setSelectedStripeItemId(e.target.value);
+              }}
+              className="w-full p-3 border rounded-lg"
+              disabled={isLoading || isCanceling}
+            >
+              <option value="">
+                {filteredStripeItems.length ? 'Select a service to add' : 'No matching services'}
+              </option>
+              {filteredStripeItems.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={addSelectedService}
+              className="w-full bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition disabled:opacity-60 text-sm"
+              disabled={!selectedStripeItemId || isLoading || isCanceling}
+            >
+              Add Service
+            </button>
+            <button
+              onClick={refreshStripeItems}
+              className="w-full bg-purple-600 text-white p-2 rounded-lg hover:bg-purple-700 transition disabled:opacity-60 text-sm"
+              disabled={isLoading || isCanceling}
+            >
+              Refresh Stripe Products
+            </button>
+            {selectedServices.length > 0 && (
+              <div className="border rounded-lg p-3 bg-gray-50 space-y-2">
+                <p className="text-sm font-medium">Selected Services</p>
+                {selectedServices.map((service) => (
+                  <div key={service.id} className="flex items-center justify-between gap-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate">{service.name}</p>
+                      <p className="text-gray-600">
+                        ${(service.amount / 100).toFixed(2)} each
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateServiceQuantity(service.id, service.quantity - 1)}
+                        className="px-2 py-1 border rounded"
+                        disabled={isLoading || isCanceling}
+                      >
+                        -
+                      </button>
+                      <span className="w-5 text-center">{service.quantity}</span>
+                      <button
+                        onClick={() => updateServiceQuantity(service.id, service.quantity + 1)}
+                        className="px-2 py-1 border rounded"
+                        disabled={isLoading || isCanceling}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <label className="block text-sm font-medium mb-2">Base Amount ($)</label>
         <input
           type="number"
@@ -198,69 +364,43 @@ export default function StripeTerminal() {
           min="0.50"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          placeholder="0.00"
+          placeholder={selectedServices.length > 0 ? 'Calculated from selected services' : '0.00'}
           className="w-full p-3 border rounded-lg text-lg mb-3"
-          disabled={isLoading || isCanceling}
+          disabled={isLoading || isCanceling || selectedServices.length > 0}
         />
 
         {/* Discount Options */}
         <div className="mb-3">
-          <label className="block text-sm font-medium mb-2">Discount</label>
-          <div className="grid grid-cols-3 gap-2 mb-2">
-            {discountOptions.map((option) => (
+          <label className="block text-sm font-medium mb-2">Coupon</label>
+          {loadingCoupons ? (
+            <div className="p-2 border rounded-lg bg-gray-50 text-sm text-gray-600">
+              Loading coupons...
+            </div>
+          ) : couponsError ? (
+            <div className="p-2 border rounded-lg bg-red-50 border-red-200 text-sm">
+              <p className="text-red-600">Failed to load coupons: {couponsError}</p>
               <button
-                key={option.value}
-                onClick={() => handleDiscountSelect(option.value)}
+                onClick={refreshCoupons}
                 disabled={isLoading || isCanceling}
-                className={`p-2 border rounded-lg text-sm transition ${
-                  discount === option.value && !showCustomInput
-                    ? 'bg-purple-600 text-white border-purple-600'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                } disabled:opacity-60`}
+                className="mt-2 bg-purple-600 text-white px-3 py-2 rounded text-xs"
               >
-                {option.label}
-              </button>
-            ))}
-            <button
-              onClick={handleCustomDiscountToggle}
-              disabled={isLoading || isCanceling}
-              className={`p-2 border rounded-lg text-sm transition ${
-                showCustomInput
-                  ? 'bg-purple-600 text-white border-purple-600'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              } disabled:opacity-60`}
-            >
-              Custom %
-            </button>
-          </div>
-
-          {showCustomInput && (
-            <div className="flex items-center space-x-2 p-2 border rounded-lg bg-yellow-50">
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                max="100"
-                value={customDiscount}
-                onChange={(e) => setCustomDiscount(e.target.value)}
-                placeholder="Enter discount %"
-                className="flex-1 p-2 border rounded text-sm"
-                disabled={isLoading || isCanceling}
-              />
-              <span className="text-sm text-gray-600 whitespace-nowrap">% off</span>
-              <button
-                onClick={() => {
-                  setShowCustomInput(false);
-                  setCustomDiscount('');
-                  setDiscount(0);
-                }}
-                disabled={isLoading || isCanceling}
-                className="p-2 text-red-600 hover:bg-red-50 rounded disabled:opacity-60"
-                title="Close custom discount"
-              >
-                ×
+                Retry Coupons
               </button>
             </div>
+          ) : (
+            <select
+              value={selectedCouponId}
+              onChange={(e) => setSelectedCouponId(e.target.value)}
+              className="w-full p-3 border rounded-lg"
+              disabled={isLoading || isCanceling}
+            >
+              <option value="">No coupon</option>
+              {coupons.map((coupon) => (
+                <option key={coupon.id} value={coupon.id}>
+                  {coupon.label}
+                </option>
+              ))}
+            </select>
           )}
         </div>
 
@@ -279,27 +419,27 @@ export default function StripeTerminal() {
               Add 3% processing fee
             </label>
           </div>
-          {includeFee && amount && <span className="text-sm text-gray-600">+${feeAmount.toFixed(2)}</span>}
+          {includeFee && baseAmount > 0 && <span className="text-sm text-gray-600">+${feeAmount.toFixed(2)}</span>}
         </div>
 
         {/* Amount Summary */}
-        {amount && (
+        {baseAmount > 0 && (
           <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex justify-between text-sm">
               <span>Base amount:</span>
               <span>${baseAmount.toFixed(2)}</span>
             </div>
 
-            {activeDiscount > 0 && (
+            {selectedCoupon && discountAmount > 0 && (
               <div className="flex justify-between text-sm text-green-600">
                 <span>
-                  Discount ({activeDiscount}%{showCustomInput && ' custom'}):
+                  Coupon ({selectedCoupon.code}):
                 </span>
                 <span>-${discountAmount.toFixed(2)}</span>
               </div>
             )}
 
-            {(activeDiscount > 0 || includeFee) && (
+            {(discountAmount > 0 || includeFee) && (
               <div className="flex justify-between text-sm font-medium border-t border-blue-200 pt-1 mt-1">
                 <span>After discount:</span>
                 <span>${amountAfterDiscount.toFixed(2)}</span>
@@ -381,7 +521,7 @@ export default function StripeTerminal() {
       <div className="space-y-3">
         <button
           onClick={handlePayment}
-          disabled={!selectedReaderId || !amount || isLoading || isCanceling}
+          disabled={!selectedReaderId || baseAmount <= 0 || isLoading || isCanceling}
           className="w-full bg-green-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-green-700 transition"
         >
           {isLoading ? 'Sending to reader...' : `Charge $${displayAmount.toFixed(2) || '0.00'}`}
