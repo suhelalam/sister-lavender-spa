@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { Menu, X, ShoppingCart } from 'lucide-react';
 import { useCart } from '../context/CartContext'; // adjust path if needed
+import { defaultBusinessHours } from '../lib/homeSettings';
 
 // Client-only cart button to prevent hydration mismatch on badge
 function ClientOnlyCartButton({ totalItems, onClick }) {
@@ -48,6 +49,7 @@ export default function Layout({ children }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [footerHours, setFooterHours] = useState(defaultBusinessHours);
   const { items, totalItems, removeItem, clearCart } = useCart();
 
   const navItems = [
@@ -57,6 +59,91 @@ export default function Layout({ children }) {
     { label: 'Location', href: '/location' },
     { label: 'Our Policy', href: '/our-policy' },
   ];
+
+  useEffect(() => {
+    const loadFooterHours = async () => {
+      try {
+        const response = await fetch('/api/admin/settings');
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (Array.isArray(payload?.settings?.businessHours)) {
+          setFooterHours(payload.settings.businessHours);
+        }
+      } catch (error) {
+        console.error('Failed to load footer hours:', error);
+      }
+    };
+
+    loadFooterHours();
+  }, []);
+
+  const formatTime = (time24) => {
+    if (!time24 || !time24.includes(':')) return time24;
+    const [hourRaw, minute] = time24.split(':');
+    const hour = Number(hourRaw);
+    if (Number.isNaN(hour)) return time24;
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const normalizedHour = hour % 12 || 12;
+    return `${normalizedHour}:${minute} ${period}`;
+  };
+
+  const dayShort = {
+    Monday: 'Mon',
+    Tuesday: 'Tue',
+    Wednesday: 'Wed',
+    Thursday: 'Thu',
+    Friday: 'Fri',
+    Saturday: 'Sat',
+    Sunday: 'Sun',
+  };
+
+  const toScheduleKey = (entry) => {
+    if (entry.closed) return 'closed';
+    return `${entry.open}-${entry.close}`;
+  };
+
+  const groupHoursForFooter = (hours) => {
+    if (!Array.isArray(hours) || hours.length === 0) return [];
+    const openGroups = [];
+    const closedDays = [];
+
+    for (const entry of hours) {
+      if (entry.closed) {
+        closedDays.push(entry.day);
+        continue;
+      }
+
+      const key = toScheduleKey(entry);
+      const prev = openGroups[openGroups.length - 1];
+      if (prev && prev.key === key) {
+        prev.days.push(entry.day);
+      } else {
+        openGroups.push({ key, days: [entry.day], entry });
+      }
+    }
+
+    const openLines = openGroups.map((group) => {
+      const firstDay = dayShort[group.days[0]] || group.days[0];
+      const lastDay = dayShort[group.days[group.days.length - 1]] || group.days[group.days.length - 1];
+      const dayLabel = group.days.length > 1 ? `${firstDay}-${lastDay}` : firstDay;
+
+      return {
+        dayLabel,
+        value: `${formatTime(group.entry.open)} - ${formatTime(group.entry.close)}`,
+        closed: false,
+      };
+    });
+
+    const closedLines = closedDays.map((day) => ({
+      dayLabel: dayShort[day] || day,
+      value: 'Closed',
+      closed: true,
+    }));
+
+    return [...openLines, ...closedLines];
+  };
+
+  const groupedFooterHours = groupHoursForFooter(footerHours);
 
   return (
     <>
@@ -197,18 +284,12 @@ export default function Layout({ children }) {
           </div>
           <div>
             <h4 className="font-semibold text-lg mb-2">Business Hours</h4>
-            <p className="flex">
-              <span className="w-20 font-semibold">Mon–Sat:</span>
-              <span>9:30 AM – 8 PM</span>
-            </p>
-            <p className="flex">
-              <span className="w-20 font-semibold">Sun:</span>
-              <span>9:30 AM – 6 PM</span>
-            </p>
-            <p className="flex text-red-600 font-medium">
-              <span className="w-20 font-semibold">Tuesday:</span>
-              <span>Closed</span>
-            </p>
+            {groupedFooterHours.map((entry) => (
+              <p key={entry.dayLabel} className={`flex ${entry.closed ? 'text-red-600 font-medium' : ''}`}>
+                <span className="w-24 font-semibold">{entry.dayLabel}:</span>
+                <span>{entry.value}</span>
+              </p>
+            ))}
           </div>
 
           <div>

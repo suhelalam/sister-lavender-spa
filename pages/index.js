@@ -1,35 +1,39 @@
 import Link from 'next/link';
 import Head from 'next/head';
-import { ServicesProvider, useServices } from '../context/ServicesContext';
+import { useEffect, useState } from 'react';
+import { useServices } from '../context/ServicesContext';
 import ServiceCard from '../components/ServiceCard';
-import { getInitialServices } from '../lib/fetchServices';
-
-export async function getServerSideProps() {
-  const initialServices = await getInitialServices();
-  return {props: {initialServices}};
-}
+import { defaultAnnouncements } from '../lib/homeSettings';
 
 function HomeContent() {
   const { services } = useServices();
-  // console.log('Services in context:', services);
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(true);
 
   const featuredServices = services.slice(1, 3); // or however you want
-  const announcements = [
-    {
-      id: 1,
-      title: "🌸 Share the Serenity",
-      date: "September 1, 2025 - September 30, 2025",
-      description: "Recommend Sister Lavender Spa to a friend, and when they book a service, you’ll both receive 10% off your next visit. A little gratitude for spreading the glow!",
-      note: "*Valid only for new client referrals. Discount applies once per client and may not be combined with other offers.*",
-    },
-    {
-      id: 2,
-      title: '✨ Self-Care is Better Together',
-      date: 'September 1, 2025 - September 30, 2025',
-      description: 'Bring in a friend or loved one for our head spa services and enjoy 20% off for both.',
-      note: '*Must pay cash and post a review for this promotion.',
-    },
-  ];
+
+  useEffect(() => {
+    const loadAnnouncements = async () => {
+      try {
+        const response = await fetch('/api/admin/settings');
+        if (response.ok) {
+          const payload = await response.json();
+          if (Array.isArray(payload?.settings?.announcements)) {
+            setAnnouncements(payload.settings.announcements);
+            return;
+          }
+        }
+        setAnnouncements(defaultAnnouncements);
+      } catch (error) {
+        console.error('Failed to load announcements:', error);
+        setAnnouncements(defaultAnnouncements);
+      } finally {
+        setAnnouncementsLoading(false);
+      }
+    };
+
+    loadAnnouncements();
+  }, []);
 
   return (
     <>
@@ -62,17 +66,22 @@ function HomeContent() {
         <div className="text-left max-w-2xl space-y-6">
           <section className="mb-10">
             <h2 className="text-2xl font-semibold text-purple-800 mb-4">📰 Latest News & Announcements</h2>
-            <ul className="space-y-6">
-              {announcements.map(({ id, title, date, description, note }) => (
-                <li key={id} className="border border-purple-300 rounded p-4 bg-white shadow-sm">
-                  <h3 className="text-xl font-bold text-purple-700">{title}</h3>
-                  <p className="text-sm text-gray-500 mb-2">{date}</p>
-                  <p>{description}</p>
-                  <p className="text-sm text-gray-600">{note}</p>
-                </li>
-              ))}
-            </ul>
+            {announcementsLoading ? (
+              <div className="h-24 border border-purple-200 rounded p-4 bg-white animate-pulse" />
+            ) : (
+              <ul className="space-y-6">
+                {announcements.map(({ id, title, date, description, note }) => (
+                  <li key={id} className="border border-purple-300 rounded p-4 bg-white shadow-sm">
+                    <h3 className="text-xl font-bold text-purple-700">{title}</h3>
+                    <p className="text-sm text-gray-500 mb-2">{date}</p>
+                    <p>{description}</p>
+                    {note ? <p className="text-sm text-gray-600">{note}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
+
           <section>
             <h2 className="text-2xl font-semibold text-purple-800 mb-2">
               🌟 Featured Services
@@ -80,7 +89,7 @@ function HomeContent() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
               {featuredServices.map((service) => (
-                <ServiceCard key={service._id} service={service} />
+                <ServiceCard key={service.id} service={service} />
               ))}
             </div>
           </section>
@@ -107,11 +116,6 @@ function HomeContent() {
   );
 }
 
-export default function Home({initialServices}) {
-  return (
-    <ServicesProvider initialServices={initialServices}>
-      <HomeContent />
-    </ServicesProvider>
-    
-  );
+export default function Home() {
+  return <HomeContent />;
 }

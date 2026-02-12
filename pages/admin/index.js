@@ -60,11 +60,13 @@ export default function AdminDashboard() {
           <p className="text-gray-600">Service popularity and booking trends</p>
         </div>
 
-        <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
-          <div className="text-3xl mb-3">⚙️</div>
-          <h2 className="text-xl font-semibold mb-2">Settings (Coming Soon)</h2>
-          <p className="text-gray-600">Business hours, pricing, and more</p>
-        </div>
+        <Link href="/admin/settings">
+          <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition cursor-pointer border border-gray-200">
+            <div className="text-3xl mb-3">⚙️</div>
+            <h2 className="text-xl font-semibold mb-2">Settings</h2>
+            <p className="text-gray-600">Update business hours and home page announcements</p>
+          </div>
+        </Link>
       </div>
 
       <div className="mt-8 p-4 bg-blue-50 rounded-lg">

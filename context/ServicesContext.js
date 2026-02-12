@@ -1,166 +1,212 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect } from "react";
-import { allServices } from "../lib/servicesData";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../lib/firebase";
 
 const ServicesContext = createContext();
+const SERVICES_COLLECTION = "services";
+
+const normalizePrice = (price) => {
+  if (typeof price === "string") return price;
+  const parsed = Number(price || 0);
+  return `$${parsed.toFixed(2)}`;
+};
+
+const normalizeService = (service) => ({
+  id: service.id,
+  name: service.name || "",
+  category: service.category || "",
+  description: service.description || "",
+  duration: Number(service.duration || 0),
+  price: normalizePrice(service.price),
+  image: service.image || "",
+  variations: Array.isArray(service.variations) ? service.variations : [],
+});
+
+const sortServices = (items) =>
+  [...items].sort((a, b) => {
+    const categoryCompare = (a.category || "").localeCompare(b.category || "");
+    if (categoryCompare !== 0) return categoryCompare;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
+const saveBackup = (items) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("spaServicesBackup", JSON.stringify(items));
+};
+
+const parseApiError = async (response, fallbackMessage) => {
+  try {
+    const json = await response.json();
+    if (json?.error) return json.error;
+  } catch {
+    // ignore non-JSON error bodies
+  }
+  return fallbackMessage;
+};
+
+const upsertServiceViaApi = async (service, method = "POST") => {
+  const response = await fetch("/api/admin/services", {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ service }),
+  });
+
+  if (!response.ok) {
+    const message = await parseApiError(response, "Failed to save service");
+    throw new Error(message);
+  }
+
+  const result = await response.json();
+  return result.service;
+};
+
+const deleteServiceViaApi = async (id) => {
+  const response = await fetch("/api/admin/services", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+
+  if (!response.ok) {
+    const message = await parseApiError(response, "Failed to delete service");
+    throw new Error(message);
+  }
+};
+
+const buildUniqueServiceId = (name, existingServices) => {
+  const baseId = (name || "service")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^\w-]/g, "");
+
+  const fallbackBase = baseId || "service";
+  let id = baseId || `service-${Date.now()}`;
+  let counter = 1;
+  const existingIds = new Set(existingServices.map((s) => s.id));
+  while (existingIds.has(id)) {
+    id = `${fallbackBase}-${counter}`;
+    counter++;
+  }
+
+  return id;
+};
 
 export const ServicesProvider = ({ children }) => {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // ALWAYS load fresh from the source file
-    console.log('Loading fresh services from servicesData.js');
-    setServices(allServices);
-    setLoading(false);
-    
-    // Optional: Save to localStorage for cart/booking persistence ONLY
-    // But don't use it for displaying services
-    localStorage.setItem('spaServicesBackup', JSON.stringify(allServices));
+    let isMounted = true;
+
+    const loadServices = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, SERVICES_COLLECTION));
+        const firestoreServices = snapshot.docs.map((serviceDoc) =>
+          normalizeService({ id: serviceDoc.id, ...serviceDoc.data() })
+        );
+        const sorted = sortServices(firestoreServices);
+
+        if (!isMounted) return;
+        setServices(sorted);
+        saveBackup(sorted);
+      } catch (error) {
+        console.error("Failed to load services from Firestore:", error);
+        if (!isMounted) return;
+        setServices([]);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadServices();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // CRUD functions for admin (will only affect current session)
-  const addService = (newService) => {
-    if (!newService.id) {
-      const baseId = newService.name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
-      let id = baseId;
-      let counter = 1;
-      
-      while (services.find(s => s.id === id)) {
-        id = `${baseId}-${counter}`;
-        counter++;
-      }
-      newService.id = id;
-    }
+  const addService = async (newService) => {
+    const id = newService.id || buildUniqueServiceId(newService.name, services);
+    const serviceToSave = normalizeService({ ...newService, id });
+    const savedService = normalizeService(await upsertServiceViaApi(serviceToSave, "POST"));
 
-    setServices(prev => [...prev, newService]);
-    
-    // Save admin changes to localStorage (temporary)
-    const updatedServices = [...services, newService];
-    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
+    setServices((prev) => {
+      const updated = sortServices([...prev, savedService]);
+      saveBackup(updated);
+      return updated;
+    });
   };
 
-  const updateService = (id, updatedData) => {
-    setServices(prev => 
-      prev.map(service => 
-        service.id === id ? { ...service, ...updatedData } : service
-      )
-    );
-    
-    // Save to localStorage
-    const updatedServices = services.map(service => 
-      service.id === id ? { ...service, ...updatedData } : service
-    );
-    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
+  const updateService = async (id, updatedData) => {
+    const serviceToSave = normalizeService({ ...updatedData, id });
+    const savedService = normalizeService(await upsertServiceViaApi(serviceToSave, "PUT"));
+
+    setServices((prev) => {
+      const updated = sortServices(
+        prev.map((service) => (service.id === id ? savedService : service))
+      );
+      saveBackup(updated);
+      return updated;
+    });
   };
 
-  const deleteService = (id) => {
-    setServices(prev => prev.filter(service => service.id !== id));
-    
-    // Save to localStorage
-    const updatedServices = services.filter(service => service.id !== id);
-    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
+  const deleteService = async (id) => {
+    await deleteServiceViaApi(id);
+
+    setServices((prev) => {
+      const updated = prev.filter((service) => service.id !== id);
+      saveBackup(updated);
+      return updated;
+    });
   };
 
   // Variation functions
-  const addVariation = (serviceId, variation) => {
-    setServices(prev => 
-      prev.map(service => {
-        if (service.id === serviceId) {
-          const newVariation = {
-            ...variation,
-            id: variation.id || `${serviceId}-${variation.name.toLowerCase().replace(/\s+/g, '-')}`,
-            version: variation.version || 1
-          };
-          const updatedService = {
-            ...service,
-            variations: [...(service.variations || []), newVariation]
-          };
-          return updatedService;
-        }
-        return service;
-      })
-    );
-    
-    // Save to localStorage
-    const updatedServices = services.map(service => {
-      if (service.id === serviceId) {
-        const newVariation = {
-          ...variation,
-          id: variation.id || `${serviceId}-${variation.name.toLowerCase().replace(/\s+/g, '-')}`,
-          version: variation.version || 1
-        };
-        return {
-          ...service,
-          variations: [...(service.variations || []), newVariation]
-        };
-      }
-      return service;
-    });
-    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
+  const addVariation = async (serviceId, variation) => {
+    const service = services.find((s) => s.id === serviceId);
+    if (!service) return;
+
+    const newVariation = {
+      ...variation,
+      id: variation.id || `${serviceId}-${variation.name.toLowerCase().replace(/\s+/g, "-")}`,
+      version: variation.version || 1,
+    };
+
+    const updatedService = {
+      ...service,
+      variations: [...(service.variations || []), newVariation],
+    };
+
+    await updateService(serviceId, updatedService);
   };
 
-  const updateVariation = (serviceId, variationId, updatedData) => {
-    setServices(prev => 
-      prev.map(service => {
-        if (service.id === serviceId && service.variations) {
-          return {
-            ...service,
-            variations: service.variations.map(variation => 
-              variation.id === variationId 
-                ? { ...variation, ...updatedData }
-                : variation
-            )
-          };
-        }
-        return service;
-      })
-    );
-    
-    // Save to localStorage
-    const updatedServices = services.map(service => {
-      if (service.id === serviceId && service.variations) {
-        return {
-          ...service,
-          variations: service.variations.map(variation => 
-            variation.id === variationId 
-              ? { ...variation, ...updatedData }
-              : variation
-          )
-        };
-      }
-      return service;
-    });
-    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
+  const updateVariation = async (serviceId, variationId, updatedData) => {
+    const service = services.find((s) => s.id === serviceId);
+    if (!service || !service.variations) return;
+
+    const updatedService = {
+      ...service,
+      variations: service.variations.map((variation) =>
+        variation.id === variationId ? { ...variation, ...updatedData } : variation
+      ),
+    };
+
+    await updateService(serviceId, updatedService);
   };
 
-  const deleteVariation = (serviceId, variationId) => {
-    setServices(prev => 
-      prev.map(service => {
-        if (service.id === serviceId && service.variations) {
-          const filteredVariations = service.variations.filter(v => v.id !== variationId);
-          return {
-            ...service,
-            variations: filteredVariations.length > 0 ? filteredVariations : undefined
-          };
-        }
-        return service;
-      })
-    );
-    
-    // Save to localStorage
-    const updatedServices = services.map(service => {
-      if (service.id === serviceId && service.variations) {
-        const filteredVariations = service.variations.filter(v => v.id !== variationId);
-        return {
-          ...service,
-          variations: filteredVariations.length > 0 ? filteredVariations : undefined
-        };
-      }
-      return service;
-    });
-    localStorage.setItem('spaServicesBackup', JSON.stringify(updatedServices));
+  const deleteVariation = async (serviceId, variationId) => {
+    const service = services.find((s) => s.id === serviceId);
+    if (!service || !service.variations) return;
+
+    const filteredVariations = service.variations.filter((variation) => variation.id !== variationId);
+    const updatedService = {
+      ...service,
+      variations: filteredVariations,
+    };
+
+    await updateService(serviceId, updatedService);
   };
 
   return (

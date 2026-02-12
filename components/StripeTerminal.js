@@ -8,6 +8,7 @@ export default function StripeTerminal() {
 
   // Track the active PI so we can cancel it
   const [activePaymentIntentId, setActivePaymentIntentId] = useState(null);
+  const [activeReaderId, setActiveReaderId] = useState(null);
   const [isCanceling, setIsCanceling] = useState(false);
 
   // Server-driven: readers come from your backend (Stripe API)
@@ -100,14 +101,21 @@ export default function StripeTerminal() {
       const resp = await fetch('/api/cancel-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment_intent_id: activePaymentIntentId }),
+        body: JSON.stringify({
+          payment_intent_id: activePaymentIntentId,
+          reader_id: activeReaderId || selectedReaderId,
+        }),
       });
 
       if (!resp.ok) throw new Error(await resp.text());
-      await resp.json();
+      const data = await resp.json();
 
       alert('Payment canceled.');
+      if (data?.reader_cancel_error) {
+        alert(`Payment intent canceled, but reader cancel failed: ${data.reader_cancel_error}`);
+      }
       setActivePaymentIntentId(null);
+      setActiveReaderId(null);
       setIsLoading(false);
     } catch (error) {
       console.error('Cancel failed:', error);
@@ -146,6 +154,7 @@ export default function StripeTerminal() {
 
       // store PI so we can cancel from UI
       setActivePaymentIntentId(piData.payment_intent_id);
+      setActiveReaderId(selectedReaderId);
 
       // 2) Tell reader to process it
       const processResp = await fetch('/api/process-on-reader', {
@@ -170,6 +179,7 @@ export default function StripeTerminal() {
       console.error('Payment failed:', error);
       alert('Payment failed: ' + (error.message || String(error)));
       setActivePaymentIntentId(null);
+      setActiveReaderId(null);
     } finally {
       setIsLoading(false);
     }

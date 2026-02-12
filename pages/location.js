@@ -1,4 +1,36 @@
+import { useEffect, useState } from "react";
+import { defaultBusinessHours } from "../lib/homeSettings";
+
 export default function Location() {
+  const [hours, setHours] = useState(defaultBusinessHours);
+
+  useEffect(() => {
+    const loadHours = async () => {
+      try {
+        const response = await fetch("/api/admin/settings");
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (Array.isArray(payload?.settings?.businessHours)) {
+          setHours(payload.settings.businessHours);
+        }
+      } catch (error) {
+        console.error("Failed to load business hours:", error);
+      }
+    };
+
+    loadHours();
+  }, []);
+
+  const formatTime = (time24) => {
+    if (!time24 || !time24.includes(":")) return time24;
+    const [hourRaw, minute] = time24.split(":");
+    const hour = Number(hourRaw);
+    if (Number.isNaN(hour)) return time24;
+    const period = hour >= 12 ? "PM" : "AM";
+    const normalizedHour = hour % 12 || 12;
+    return `${normalizedHour}:${minute} ${period}`;
+  };
+
   return (
     <main className="p-6 max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6 text-center">Our Location</h1>
@@ -21,34 +53,12 @@ export default function Location() {
         <div>
           <h2 className="text-2xl font-semibold mb-2 text-center">Business Hours</h2>
           <ul className="list-none text-gray-700 text-left">
-            <li className="flex">
-              <span className="w-24 font-semibold">Monday:</span>
-              <span>9:30AM - 8:00PM</span>
-            </li>
-            <li className="flex">
-              <span className="w-24 font-semibold">Tuesday:</span>
-              <span>Closed</span>
-            </li>
-            <li className="flex">
-              <span className="w-24 font-semibold">Wednesday:</span>
-              <span>9:30AM - 8:00PM</span>
-            </li>
-            <li className="flex">
-              <span className="w-24 font-semibold">Thursday:</span>
-              <span>9:30AM - 8:00PM</span>
-            </li>
-            <li className="flex">
-              <span className="w-24 font-semibold">Friday:</span>
-              <span>9:30AM - 8:00PM</span>
-            </li>
-            <li className="flex">
-              <span className="w-24 font-semibold">Saturday:</span>
-              <span>9:30AM - 8:00PM</span>
-            </li>
-            <li className="flex">
-              <span className="w-24 font-semibold">Sunday:</span>
-              <span>9:30AM - 6:00PM</span>
-            </li>
+            {hours.map((entry) => (
+              <li key={entry.day} className={`flex ${entry.closed ? "text-red-600 font-medium" : ""}`}>
+                <span className="w-24 font-semibold">{entry.day}:</span>
+                <span>{entry.closed ? "Closed" : `${formatTime(entry.open)} - ${formatTime(entry.close)}`}</span>
+              </li>
+            ))}
           </ul>
 
         </div>

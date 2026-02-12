@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../../lib/firebase";
 import { useRouter } from "next/router";
@@ -14,6 +13,7 @@ export default function AdminServicesPage() {
   const [editingService, setEditingService] = useState(null);
   const [editingVariation, setEditingVariation] = useState(null);
   const [activeTab, setActiveTab] = useState('add');
+  const [saving, setSaving] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -39,6 +39,12 @@ export default function AdminServicesPage() {
     'Manicure Services',
     'Cupping Therapy'
   ];
+
+  const toCents = (value) => {
+    const numeric = Number.parseFloat(String(value ?? "").replace(/[^\d.]/g, ""));
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.round(numeric * 100);
+  };
 
   // Protect the page with Firebase Auth
   useEffect(() => {
@@ -68,9 +74,17 @@ export default function AdminServicesPage() {
     }
   }, [editingService]);
 
-  const handleServiceSubmit = (e) => {
+  useEffect(() => {
+    if (!editingService) return;
+    const freshService = services.find((service) => service.id === editingService.id);
+    if (freshService && freshService !== editingService) {
+      setEditingService(freshService);
+    }
+  }, [services, editingService]);
+
+  const handleServiceSubmit = async (e) => {
     e.preventDefault();
-    
+
     const displayPrice = formData.price.includes('$') 
       ? formData.price 
       : `$${parseFloat(formData.price).toFixed(2)}`;
@@ -86,23 +100,30 @@ export default function AdminServicesPage() {
       variations: formData.variations.map(variation => ({
         id: variation.id || `${formData.name.toLowerCase().replace(/\s+/g, '-')}-${variation.name.toLowerCase().replace(/\s+/g, '-')}`,
         name: variation.name,
-        price: parseInt(variation.price) * 100,
+        price: typeof variation.price === 'number' ? Math.round(variation.price) : toCents(variation.price),
         currency: variation.currency || 'USD',
-        duration: parseInt(variation.duration) * 60000,
+        duration: typeof variation.duration === 'number' ? Math.round(variation.duration) : parseInt(variation.duration) * 60000,
         version: 1
       }))
     };
     
-    if (editingService) {
-      updateService(editingService.id, serviceData);
-    } else {
-      addService(serviceData);
+    setSaving(true);
+    try {
+      if (editingService) {
+        await updateService(editingService.id, serviceData);
+      } else {
+        await addService(serviceData);
+      }
+      resetForm();
+    } catch (error) {
+      console.error("Failed to save service:", error);
+      alert(`Failed to save service: ${error.message || String(error)}`);
+    } finally {
+      setSaving(false);
     }
-    
-    resetForm();
   };
 
-  const handleVariationSubmit = (e) => {
+  const handleVariationSubmit = async (e) => {
     e.preventDefault();
     
     if (!editingService) {
@@ -113,19 +134,26 @@ export default function AdminServicesPage() {
     const variationData = {
       id: `${editingService.id}-${variationForm.name.toLowerCase().replace(/\s+/g, '-')}`,
       name: variationForm.name,
-      price: parseInt(variationForm.price) * 100,
+      price: toCents(variationForm.price),
       currency: variationForm.currency,
       duration: parseInt(variationForm.duration) * 60000,
       version: 1
     };
     
-    if (editingVariation) {
-      updateVariation(editingService.id, editingVariation.id, variationData);
-    } else {
-      addVariation(editingService.id, variationData);
+    setSaving(true);
+    try {
+      if (editingVariation) {
+        await updateVariation(editingService.id, editingVariation.id, variationData);
+      } else {
+        await addVariation(editingService.id, variationData);
+      }
+      resetVariationForm();
+    } catch (error) {
+      console.error("Failed to save variation:", error);
+      alert(`Failed to save variation: ${error.message || String(error)}`);
+    } finally {
+      setSaving(false);
     }
-    
-    resetVariationForm();
   };
 
   const resetForm = () => {
@@ -170,15 +198,31 @@ export default function AdminServicesPage() {
     setActiveTab('variations');
   };
 
-  const handleDeleteVariation = (serviceId, variationId) => {
+  const handleDeleteVariation = async (serviceId, variationId) => {
     if (confirm('Are you sure you want to delete this variation?')) {
-      deleteVariation(serviceId, variationId);
+      setSaving(true);
+      try {
+        await deleteVariation(serviceId, variationId);
+      } catch (error) {
+        console.error("Failed to delete variation:", error);
+        alert(`Failed to delete variation: ${error.message || String(error)}`);
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
-  const handleDeleteService = (id) => {
+  const handleDeleteService = async (id) => {
     if (confirm('Are you sure you want to delete this service? This will also delete all variations.')) {
-      deleteService(id);
+      setSaving(true);
+      try {
+        await deleteService(id);
+      } catch (error) {
+        console.error("Failed to delete service:", error);
+        alert(`Failed to delete service: ${error.message || String(error)}`);
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
@@ -330,14 +374,16 @@ export default function AdminServicesPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
+                  disabled={saving}
                   className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
                 >
-                  {editingService ? 'Update Service' : 'Add Service'}
+                  {saving ? 'Saving...' : editingService ? 'Update Service' : 'Add Service'}
                 </button>
                 {editingService && (
                   <button
                     type="button"
                     onClick={resetForm}
+                    disabled={saving}
                     className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
                   >
                     Cancel
@@ -423,13 +469,15 @@ export default function AdminServicesPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
+                  disabled={saving}
                   className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
                 >
-                  {editingVariation ? 'Update Variation' : 'Add Variation'}
+                  {saving ? 'Saving...' : editingVariation ? 'Update Variation' : 'Add Variation'}
                 </button>
                 <button
                   type="button"
                   onClick={resetVariationForm}
+                  disabled={saving}
                   className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
                 >
                   {editingVariation ? 'Cancel' : 'Clear'}
