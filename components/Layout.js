@@ -34,7 +34,7 @@ function ClientOnlyCheckoutButton({ items, onClick }) {
 
   return (
     <Link
-      href="/booking"
+      href="/services"
       onClick={onClick}
       className={`bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 ${
         items.length === 0 ? 'opacity-50 pointer-events-none' : ''
@@ -173,7 +173,7 @@ export default function Layout({ children }) {
           {/* Desktop Book Now + Cart */}
           <div className="hidden md:flex items-center space-x-4">
             <Link
-              href="/booking"
+              href="/services"
               className="bg-purple-600 text-white px-4 py-2 rounded-full font-medium hover:bg-purple-700"
             >
               Book Now
@@ -217,7 +217,7 @@ export default function Layout({ children }) {
               </Link>
             ))}
             <Link
-              href="/booking"
+              href="/services"
               onClick={() => setMenuOpen(false)}
               className="block mt-2 bg-purple-600 text-white px-4 py-2 rounded-full text-center"
             >

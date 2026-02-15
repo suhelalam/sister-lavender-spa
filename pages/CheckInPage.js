@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
-import axios from "axios";
+import { addDoc, collection } from "firebase/firestore";
+import { db } from "../lib/firebase";
 
 export default function CheckInPage({ bookingId }) {
   const sigCanvas = useRef(null);
@@ -59,16 +60,11 @@ export default function CheckInPage({ bookingId }) {
         timestamp: new Date().toISOString(),
       };
 
-      const res = await axios.post("/api/checkin", payload);
-
-      if (res.data.success) {
-        setSuccess(true);
-      } else {
-        throw new Error("Submission failed");
-      }
+      await addDoc(collection(db, "checkins"), payload);
+      setSuccess(true);
     } catch (err) {
       console.error("Check-in failed:", err);
-      alert("There was an error submitting the form.");
+      alert(`There was an error submitting the form: ${err.message || "Unknown error"}`);
     } finally {
       setIsSubmitting(false);
     }

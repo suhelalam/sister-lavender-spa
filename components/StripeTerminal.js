@@ -22,6 +22,7 @@ export default function StripeTerminal() {
   const [activePaymentIntentId, setActivePaymentIntentId] = useState(null);
   const [activeReaderId, setActiveReaderId] = useState(null);
   const [isCanceling, setIsCanceling] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState(null);
 
   // Server-driven: readers come from your backend (Stripe API)
   const [readers, setReaders] = useState([]);
@@ -137,6 +138,58 @@ export default function StripeTerminal() {
     setCartPreviewShown(false);
   }, [selectedServices, selectedReaderId, includeFee, selectedCouponId, amount, additionalCharge]);
 
+  const clearTerminalUiState = () => {
+    setActivePaymentIntentId(null);
+    setActiveReaderId(null);
+    setCartPreviewShown(false);
+  };
+
+  const clearReaderDisplay = async (readerId) => {
+    if (!readerId) return;
+    try {
+      await fetch('/api/clear-reader-display', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reader_id: readerId }),
+      });
+    } catch (error) {
+      console.warn('Failed to clear reader display:', error);
+    }
+  };
+
+  const waitForTerminalPaymentResult = async (paymentIntentId) => {
+    const timeoutMs = 120000;
+    const intervalMs = 2000;
+    const startedAt = Date.now();
+    let lastStatus = null;
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const resp = await fetch('/api/payment-intent-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_intent_id: paymentIntentId }),
+      });
+
+      if (!resp.ok) {
+        throw new Error(await resp.text());
+      }
+
+      const data = await resp.json();
+      const status = data?.status;
+      lastStatus = status;
+
+      // For terminal/server-driven flows, requires_capture can still represent
+      // a successful authorization depending on account settings.
+      if (status === 'succeeded' || status === 'requires_capture') return 'succeeded';
+      if (status === 'canceled') return 'canceled';
+
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    if (lastStatus === 'requires_payment_method') return 'not_completed';
+    return 'timeout';
+  };
+
   const resetForm = () => {
     setAmount('');
     setAdditionalCharge('');
@@ -188,6 +241,7 @@ export default function StripeTerminal() {
         if (!clearResp.ok) throw new Error(await clearResp.text());
         await clearResp.json();
 
+        setPaymentStatus({ type: 'info', text: 'Reader cart cleared.' });
         setCartPreviewShown(false);
         alert('Reader cart cleared.');
       } catch (error) {
@@ -219,8 +273,8 @@ export default function StripeTerminal() {
       if (data?.reader_cancel_error) {
         alert(`Payment intent canceled, but reader cancel failed: ${data.reader_cancel_error}`);
       }
-      setActivePaymentIntentId(null);
-      setActiveReaderId(null);
+      setPaymentStatus({ type: 'info', text: 'Payment canceled.' });
+      clearTerminalUiState();
       setIsLoading(false);
     } catch (error) {
       console.error('Cancel failed:', error);
@@ -232,6 +286,7 @@ export default function StripeTerminal() {
 
   // ----- Server-driven payment -----
   const handlePayment = async () => {
+    setPaymentStatus(null);
     if (!selectedReaderId) {
       alert('Please select a reader first');
       return;
@@ -304,6 +359,7 @@ export default function StripeTerminal() {
         }
 
         setCartPreviewShown(true);
+        setPaymentStatus({ type: 'info', text: 'Services shown on reader. Click charge to start payment.' });
         alert('Services displayed on reader. Press charge again to start payment.');
         return;
       }
@@ -346,17 +402,44 @@ export default function StripeTerminal() {
       if (!processResp.ok) throw new Error(await processResp.text());
       await processResp.json();
 
-      alert('Sent to reader. Complete the payment on the S700.');
+      setPaymentStatus({ type: 'info', text: 'Waiting for payment on terminal...' });
+      const paymentResult = await waitForTerminalPaymentResult(piData.payment_intent_id);
 
-      // Important: without webhooks, we don’t know when it succeeds.
-      // Keep the cancel button available while you’re waiting on the reader.
-      // If you prefer, you can clear activePaymentIntentId manually after you confirm success.
-      resetForm();
+      if (paymentResult === 'succeeded') {
+        await clearReaderDisplay(selectedReaderId);
+        setPaymentStatus({ type: 'success', text: 'Payment successful.' });
+        clearTerminalUiState();
+        resetForm();
+        return;
+      }
+
+      if (paymentResult === 'canceled' || paymentResult === 'failed') {
+        setPaymentStatus({
+          type: 'error',
+          text: paymentResult === 'canceled' ? 'Payment was canceled.' : 'Payment failed. Please try again.',
+        });
+        clearTerminalUiState();
+        return;
+      }
+
+      if (paymentResult === 'not_completed') {
+        setPaymentStatus({
+          type: 'info',
+          text: 'Payment was not completed on the reader. You can try charging again.',
+        });
+        clearTerminalUiState();
+        return;
+      }
+
+      setPaymentStatus({
+        type: 'info',
+        text: 'Payment is still processing on terminal. You can cancel if needed.',
+      });
     } catch (error) {
       console.error('Payment failed:', error);
       alert('Payment failed: ' + (error.message || String(error)));
-      setActivePaymentIntentId(null);
-      setActiveReaderId(null);
+      setPaymentStatus({ type: 'error', text: 'Payment failed. Please try again.' });
+      clearTerminalUiState();
     } finally {
       setIsLoading(false);
     }
@@ -637,6 +720,20 @@ export default function StripeTerminal() {
 
       {/* Payment Buttons */}
       <div className="space-y-3">
+        {paymentStatus && (
+          <div
+            className={`p-3 rounded text-sm ${
+              paymentStatus.type === 'success'
+                ? 'bg-green-50 text-green-700 border border-green-200'
+                : paymentStatus.type === 'error'
+                  ? 'bg-red-50 text-red-700 border border-red-200'
+                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+            }`}
+          >
+            {paymentStatus.text}
+          </div>
+        )}
+
         <button
           onClick={handlePayment}
           disabled={!selectedReaderId || baseAmount <= 0 || isLoading || isCanceling}

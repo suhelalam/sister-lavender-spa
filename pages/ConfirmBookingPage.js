@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import { useCart } from '../context/CartContext';
 import Modal from '../components/Modal';
 import OurPolicy from './our-policy';
+import ServiceAgreement from './service-agreement';
 
 export default function ConfirmBookingPage() {
   const { items, isClient, clearCart } = useCart();
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [showPolicy, setShowPolicy] = useState(false);
+  const [showServiceAgreement, setShowServiceAgreement] = useState(false);
 
   // Form state
   const [phone, setPhone] = useState('');
@@ -123,7 +125,9 @@ export default function ConfirmBookingPage() {
           {/* <div className="text-sm text-purple-700 cursor-pointer hover:underline">Sign in</div> */}
 
           <div className="flex gap-2 items-center">
-            <span className="text-lg">US +1</span>
+            <span className="text-sm font-medium whitespace-nowrap rounded border border-gray-300 bg-gray-50 px-3 py-2">
+              US +1
+            </span>
             <input
               type="tel"
               placeholder="(000) 000-0000"
@@ -211,8 +215,16 @@ export default function ConfirmBookingPage() {
           </button>
         </section>
 
-        <section className="text-sm text-gray-500">
-          Upon booking, Square will automatically create an account for you with Square Appointments. You can sign back in using your mobile number at any time. You may also receive promotional emails from Square.
+        <section className="text-sm text-gray-600">
+          By booking an appointment, you acknowledge and agree to our{' '}
+          <button
+            type="button"
+            onClick={() => setShowServiceAgreement(true)}
+            className="text-purple-600 underline"
+          >
+            service-agreement
+          </button>
+          .
         </section>
 
         <section className="border rounded p-4 shadow bg-white">
@@ -287,6 +299,10 @@ export default function ConfirmBookingPage() {
       {/* Modal for Policy */}
       <Modal isOpen={showPolicy} onClose={() => setShowPolicy(false)}>
         <OurPolicy />
+      </Modal>
+
+      <Modal isOpen={showServiceAgreement} onClose={() => setShowServiceAgreement(false)}>
+        <ServiceAgreement />
       </Modal>
     </div>
   );

@@ -11,7 +11,7 @@ export default function OurPolicy() {
 
         <li><strong>Late Arrivals:</strong> Arriving more than 10 minutes late may result in a shortened service or rescheduling to avoid delays for the next guest.</li>
 
-        <li><strong>Cancellation Policy:</strong> We require at least 24 hours' notice to cancel or reschedule an appointment. No-shows or late cancellations may be subject to a cancellation fee.</li>
+        <li><strong>Cancellation Policy:</strong> We require at least 24 hours&apos; notice to cancel or reschedule an appointment. No-shows or late cancellations may be subject to a cancellation fee.</li>
 
         <li><strong>Health Conditions:</strong> Please inform us of any medical conditions, allergies, or injuries that may affect your treatment. This ensures your comfort and safety during services like massages or scalp treatments.</li>
 

@@ -1,6 +1,8 @@
 import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 import Stripe from 'stripe';
+import { db } from '../../lib/firebase';
+import { addDoc, collection } from 'firebase/firestore';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -293,6 +295,39 @@ Address: 2706 W Chicago Ave, Chicago, IL 60622
     });
   }
 
+  async function logBookingAnalytics() {
+    const serviceLines = Array.isArray(services)
+      ? services.map((service) => ({
+          serviceName: service.serviceName || service.serviceVariationId || 'Unknown Service',
+          serviceVariationId: service.serviceVariationId || '',
+          quantity: Math.max(1, Number(service.quantity || 1)),
+          durationMinutes: Math.max(0, Number(service.durationMinutes || 0)),
+        }))
+      : [];
+
+    const totalServiceUnits = serviceLines.reduce(
+      (sum, service) => sum + (service.quantity || 0),
+      0
+    );
+
+    await addDoc(collection(db, 'bookingAnalytics'), {
+      bookedAt: new Date().toISOString(),
+      startAt: startAt || null,
+      locationId: locationId || null,
+      partySize: Number(partySize || 1),
+      totalFormatted: totalFormatted || null,
+      note: note || null,
+      customer: {
+        name: `${firstName} ${lastName}`.trim(),
+        email: (email || '').trim().toLowerCase(),
+        phone: phone || '',
+      },
+      services: serviceLines,
+      totalServiceUnits,
+      serviceNames: serviceLines.map((service) => service.serviceName),
+    });
+  }
+
   try {
     // 🗓️ 1. Add to Google Calendar
     const calendarEvent = await addToGoogleCalendar();
@@ -303,6 +338,14 @@ Address: 2706 W Chicago Ave, Chicago, IL 60622
 
     // 💳 3. Add / reuse Stripe customer
     const stripeCustomer = await upsertStripeCustomer();
+
+    // 📈 4. Persist analytics event for booked services
+    try {
+      await logBookingAnalytics();
+    } catch (analyticsError) {
+      // Non-blocking: booking should still succeed even if analytics write fails.
+      console.error('Booking analytics write failed:', analyticsError);
+    }
 
     return res.status(200).json({
       success: true,

@@ -60,6 +60,8 @@ function normalizeServiceInput(rawService) {
     duration: Number(rawService.duration || 0),
     price: typeof rawService.price === "string" ? rawService.price : `$${Number(rawService.price || 0).toFixed(2)}`,
     image: String(rawService.image || "").trim(),
+    isAddOn: Boolean(rawService.isAddOn),
+    appliesToCategory: String(rawService.appliesToCategory || "").trim(),
     stripeProductId: rawService.stripeProductId || null,
     variations: [],
   };
@@ -98,6 +100,8 @@ async function ensureStripeProduct(service, existingService) {
         metadata: {
           service_id: service.id,
           category: service.category || "",
+          is_add_on: service.isAddOn ? "true" : "false",
+          applies_to_category: service.appliesToCategory || "",
         },
       });
     } catch (error) {
@@ -111,6 +115,8 @@ async function ensureStripeProduct(service, existingService) {
     metadata: {
       service_id: service.id,
       category: service.category || "",
+      is_add_on: service.isAddOn ? "true" : "false",
+      applies_to_category: service.appliesToCategory || "",
     },
   });
 }

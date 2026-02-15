@@ -1,5 +1,22 @@
-import { db } from '../../lib/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { google } from 'googleapis';
+
+const FIREBASE_PROJECT_ID =
+  process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+function toFirestoreFields(data) {
+  const fields = {};
+
+  Object.entries(data).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    if (typeof value === 'boolean') {
+      fields[key] = { booleanValue: value };
+      return;
+    }
+    fields[key] = { stringValue: String(value) };
+  });
+
+  return fields;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -41,12 +58,50 @@ export default async function handler(req, res) {
     if (address && address.trim()) data.address = address.trim();
     if (serviceDate) data.serviceDate = serviceDate;
 
-    // Save to Firestore
-    const docRef = await addDoc(collection(db, "checkins"), data);
+    if (!FIREBASE_PROJECT_ID) {
+      return res.status(500).json({ error: 'Missing Firebase project id configuration' });
+    }
 
-    return res.status(200).json({ success: true, id: docRef.id });
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      },
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    });
+
+    const client = await auth.getClient();
+    const accessTokenResponse = await client.getAccessToken();
+    const accessToken = accessTokenResponse?.token;
+    if (!accessToken) {
+      return res.status(500).json({ error: 'Failed to obtain Google access token' });
+    }
+
+    const response = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/checkins`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fields: toFirestoreFields(data) }),
+      }
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      console.error('Firestore check-in write failed:', body);
+      return res.status(500).json({ error: 'Failed to store check-in' });
+    }
+
+    const result = await response.json();
+    const namePath = result?.name || '';
+    const id = namePath.split('/').pop() || null;
+
+    return res.status(200).json({ success: true, id });
   } catch (err) {
     console.error("Firebase write error:", err);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: err.message || "Internal server error" });
   }
 }

@@ -6,9 +6,8 @@ import { ChevronDown, ChevronUp, Plus, Minus } from 'lucide-react';
 
 export default function AppointmentSummary({ selectedSlot }) {
   const { items, addItem, removeItem, isClient } = useCart();
-  if (!isClient) return <div className="p-4">Loading...</div>;
-
   const [isOpen, setIsOpen] = useState(true);
+  if (!isClient) return <div className="p-4">Loading...</div>;
 
   const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const totalFormatted = `$${(total / 100).toFixed(2)}`;

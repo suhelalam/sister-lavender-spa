@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Head from 'next/head';
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useServices } from '../context/ServicesContext';
 import ServiceCard from '../components/ServiceCard';
@@ -44,10 +45,13 @@ function HomeContent() {
 
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-6 bg-purple-50">
         {/* Logo */}
-        <img
+        <Image
           src="/logo.png"
           alt="Sister Lavender Spa Logo"
-          className="mb-6 w-32 h-auto"
+          width={128}
+          height={128}
+          className="mb-6 h-auto w-32"
+          priority
         />
 
         <h1 className="text-5xl font-bold mb-4 text-purple-700">
@@ -58,7 +62,7 @@ function HomeContent() {
         </p>
 
         <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0 mb-8">
-          <Link href="/AllServices" className="px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition">Book Appointment</Link>
+          <Link href="/services" className="px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition">Book Appointment</Link>
           <Link href="/service-agreement" className="px-6 py-3 border border-purple-600 text-purple-600 rounded hover:bg-purple-100 transition">Service Agreement</Link>
           <Link href="/gift-card" className="px-6 py-3 border border-yellow-500 text-yellow-700 rounded hover:bg-yellow-100 transition">Buy Gift Card</Link>
         </div>

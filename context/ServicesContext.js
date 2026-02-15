@@ -1,8 +1,9 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useMemo, useState, useEffect } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { allServices } from "../lib/servicesData";
 
 const ServicesContext = createContext();
 const SERVICES_COLLECTION = "services";
@@ -22,10 +23,16 @@ const normalizeService = (service) => ({
   price: normalizePrice(service.price),
   image: service.image || "",
   variations: Array.isArray(service.variations) ? service.variations : [],
+  isAddOn: Boolean(service.isAddOn),
+  appliesToCategory: service.appliesToCategory || "",
 });
 
 const sortServices = (items) =>
   [...items].sort((a, b) => {
+    if (Boolean(a.isAddOn) !== Boolean(b.isAddOn)) {
+      return a.isAddOn ? 1 : -1;
+    }
+
     const categoryCompare = (a.category || "").localeCompare(b.category || "");
     if (categoryCompare !== 0) return categoryCompare;
     return (a.name || "").localeCompare(b.name || "");
@@ -34,6 +41,18 @@ const sortServices = (items) =>
 const saveBackup = (items) => {
   if (typeof window === "undefined") return;
   localStorage.setItem("spaServicesBackup", JSON.stringify(items));
+};
+
+const getBackupServices = () => {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem("spaServicesBackup");
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 };
 
 const parseApiError = async (response, fallbackMessage) => {
@@ -94,6 +113,37 @@ const buildUniqueServiceId = (name, existingServices) => {
   return id;
 };
 
+const toDisplayPrice = (cents) => `$${(Math.max(0, Number(cents) || 0) / 100).toFixed(2)}`;
+
+const buildAddOnServicePayload = (addOnInput, existingService) => {
+  const durationMs = Number(addOnInput.duration || 0);
+  const priceCents = Math.max(0, Number(addOnInput.price) || 0);
+  const variationId = existingService?.variations?.[0]?.id || `${addOnInput.id}-standard`;
+  const variationVersion = existingService?.variations?.[0]?.version || 1;
+
+  return {
+    id: addOnInput.id,
+    name: addOnInput.name || "",
+    category: "Add-ons",
+    appliesToCategory: addOnInput.category || existingService?.appliesToCategory || "",
+    description: addOnInput.description || "",
+    duration: Math.round(durationMs / 60000),
+    price: toDisplayPrice(priceCents),
+    image: "",
+    isAddOn: true,
+    variations: [
+      {
+        id: variationId,
+        name: "Standard",
+        price: priceCents,
+        currency: "USD",
+        duration: durationMs,
+        version: variationVersion,
+      },
+    ],
+  };
+};
+
 export const ServicesProvider = ({ children }) => {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -107,15 +157,20 @@ export const ServicesProvider = ({ children }) => {
         const firestoreServices = snapshot.docs.map((serviceDoc) =>
           normalizeService({ id: serviceDoc.id, ...serviceDoc.data() })
         );
-        const sorted = sortServices(firestoreServices);
+        const sortedServices = sortServices(firestoreServices);
 
         if (!isMounted) return;
-        setServices(sorted);
-        saveBackup(sorted);
+        setServices(sortedServices);
+        saveBackup(sortedServices);
       } catch (error) {
         console.error("Failed to load services from Firestore:", error);
         if (!isMounted) return;
-        setServices([]);
+        const backup = getBackupServices();
+        if (backup.length > 0) {
+          setServices(sortServices(backup.map(normalizeService)));
+        } else {
+          setServices(sortServices((allServices || []).map(normalizeService)));
+        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -163,7 +218,20 @@ export const ServicesProvider = ({ children }) => {
     });
   };
 
-  // Variation functions
+  const addAddOn = async (newAddOn) => {
+    const id = newAddOn.id || buildUniqueServiceId(newAddOn.name, services);
+    await addService(buildAddOnServicePayload({ ...newAddOn, id }));
+  };
+
+  const updateAddOn = async (id, updatedData) => {
+    const existingService = services.find((service) => service.id === id && service.isAddOn);
+    await updateService(id, buildAddOnServicePayload({ ...updatedData, id }, existingService));
+  };
+
+  const deleteAddOn = async (id) => {
+    await deleteService(id);
+  };
+
   const addVariation = async (serviceId, variation) => {
     const service = services.find((s) => s.id === serviceId);
     if (!service) return;
@@ -209,17 +277,28 @@ export const ServicesProvider = ({ children }) => {
     await updateService(serviceId, updatedService);
   };
 
+  const addOns = useMemo(
+    () => services.filter((service) => service.isAddOn),
+    [services]
+  );
+
   return (
-    <ServicesContext.Provider value={{ 
-      services, 
-      loading, 
-      addService, 
-      updateService, 
-      deleteService,
-      addVariation,
-      updateVariation,
-      deleteVariation
-    }}>
+    <ServicesContext.Provider
+      value={{
+        services,
+        addOns,
+        loading,
+        addService,
+        updateService,
+        deleteService,
+        addAddOn,
+        updateAddOn,
+        deleteAddOn,
+        addVariation,
+        updateVariation,
+        deleteVariation,
+      }}
+    >
       {children}
     </ServicesContext.Provider>
   );

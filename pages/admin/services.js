@@ -1,11 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../../lib/firebase";
 import { useRouter } from "next/router";
 import { useServices } from "../../context/ServicesContext";
 
 export default function AdminServicesPage() {
-  const { services, addService, updateService, deleteService, addVariation, updateVariation, deleteVariation } = useServices();
+  const {
+    services,
+    addOns,
+    addService,
+    updateService,
+    deleteService,
+    addAddOn,
+    updateAddOn,
+    deleteAddOn,
+    addVariation,
+    updateVariation,
+    deleteVariation,
+  } = useServices();
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const router = useRouter();
@@ -14,6 +26,8 @@ export default function AdminServicesPage() {
   const [editingVariation, setEditingVariation] = useState(null);
   const [activeTab, setActiveTab] = useState('add');
   const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [addOnSearchTerm, setAddOnSearchTerm] = useState('');
   
   const [formData, setFormData] = useState({
     name: '',
@@ -31,13 +45,22 @@ export default function AdminServicesPage() {
     duration: '',
     currency: 'USD'
   });
+
+  const [editingAddOn, setEditingAddOn] = useState(null);
+  const [addOnForm, setAddOnForm] = useState({
+    name: '',
+    category: 'Head Spa Treatments',
+    price: '',
+    duration: '',
+    description: '',
+  });
   
   const categories = [
+    'Side-by-Side Services',
     'Head Spa Treatments',
     'Body Massage Treatments', 
     'Foot Care',
-    'Manicure Services',
-    'Cupping Therapy'
+    'Manicure Services'
   ];
 
   const toCents = (value) => {
@@ -58,7 +81,7 @@ export default function AdminServicesPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (editingService) {
@@ -226,6 +249,119 @@ export default function AdminServicesPage() {
     }
   };
 
+  const handleAddOnSubmit = async (e) => {
+    e.preventDefault();
+
+    const addOnData = {
+      id: editingAddOn
+        ? editingAddOn.id
+        : addOnForm.name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+      name: addOnForm.name.trim(),
+      category: addOnForm.category,
+      price: toCents(addOnForm.price),
+      duration: Number.parseInt(addOnForm.duration || '0', 10) * 60000,
+      description: addOnForm.description.trim(),
+    };
+
+    setSaving(true);
+    try {
+      if (editingAddOn) {
+        await updateAddOn(editingAddOn.id, addOnData);
+      } else {
+        await addAddOn(addOnData);
+      }
+      resetAddOnForm();
+    } catch (error) {
+      console.error("Failed to save add-on:", error);
+      alert(`Failed to save add-on: ${error.message || String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetAddOnForm = () => {
+    setEditingAddOn(null);
+    setAddOnForm({
+      name: '',
+      category: 'Head Spa Treatments',
+      price: '',
+      duration: '',
+      description: '',
+    });
+  };
+
+  const handleEditAddOn = (addOn) => {
+    const baseVariation = Array.isArray(addOn.variations) && addOn.variations.length > 0
+      ? addOn.variations[0]
+      : null;
+
+    setEditingAddOn(addOn);
+    setAddOnForm({
+      name: addOn.name,
+      category: addOn.appliesToCategory || 'Head Spa Treatments',
+      price: (Number(baseVariation?.price || 0) / 100).toString(),
+      duration: (Number(baseVariation?.duration || 0) / 60000).toString(),
+      description: addOn.description || '',
+    });
+    setActiveTab('addons');
+  };
+
+  const handleDeleteAddOn = async (id) => {
+    if (confirm('Are you sure you want to delete this add-on?')) {
+      setSaving(true);
+      try {
+        await deleteAddOn(id);
+        if (editingAddOn?.id === id) {
+          resetAddOnForm();
+        }
+      } catch (error) {
+        console.error("Failed to delete add-on:", error);
+        alert(`Failed to delete add-on: ${error.message || String(error)}`);
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
+
+  const regularServices = useMemo(
+    () => services.filter((service) => !service.isAddOn),
+    [services]
+  );
+
+  const filteredServices = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return regularServices;
+
+    return regularServices.filter((service) => {
+      const values = [
+        service.name,
+        service.category,
+        service.description,
+        service.price,
+        ...(service.variations || []).map((variation) => variation.name),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return values.includes(query);
+    });
+  }, [regularServices, searchTerm]);
+
+  const filteredAddOns = useMemo(() => {
+    const query = addOnSearchTerm.trim().toLowerCase();
+    if (!query) return addOns;
+
+    return addOns.filter((addOn) => {
+      const values = [addOn.name, addOn.appliesToCategory, addOn.description]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return values.includes(query);
+    });
+  }, [addOns, addOnSearchTerm]);
+
   if (loadingAuth) return <p className="text-center mt-10">Checking authentication...</p>;
 
   return (
@@ -270,6 +406,12 @@ export default function AdminServicesPage() {
                   </button>
                 </>
               )}
+              <button
+                onClick={() => setActiveTab('addons')}
+                className={`py-2 px-4 ${activeTab === 'addons' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500'}`}
+              >
+                Manage Add-ons
+              </button>
             </nav>
           </div>
 
@@ -522,26 +664,138 @@ export default function AdminServicesPage() {
               )}
             </div>
           )}
+
+          {activeTab === 'addons' && (
+            <form onSubmit={handleAddOnSubmit} className="bg-white p-6 rounded-lg shadow-md space-y-4">
+              <h3 className="text-lg font-semibold">
+                {editingAddOn ? 'Edit Add-on' : 'Add New Add-on'}
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Add-on Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={addOnForm.name}
+                    onChange={(e) => setAddOnForm({ ...addOnForm, name: e.target.value })}
+                    className="w-full p-2 border rounded"
+                    required
+                    placeholder="e.g., Hot Oil Scalp Boost"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Category *
+                  </label>
+                  <select
+                    value={addOnForm.category}
+                    onChange={(e) => setAddOnForm({ ...addOnForm, category: e.target.value })}
+                    className="w-full p-2 border rounded"
+                    required
+                  >
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Price (USD) *
+                  </label>
+                  <div className="flex">
+                    <span className="inline-flex items-center px-3 border border-r-0 rounded-l bg-gray-50">
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      value={addOnForm.price}
+                      onChange={(e) => setAddOnForm({ ...addOnForm, price: e.target.value })}
+                      className="w-full p-2 border rounded-r"
+                      required
+                      min="0"
+                      step="0.01"
+                      placeholder="e.g., 15.00"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Extra Duration (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={addOnForm.duration}
+                    onChange={(e) => setAddOnForm({ ...addOnForm, duration: e.target.value })}
+                    className="w-full p-2 border rounded"
+                    min="0"
+                    placeholder="e.g., 10"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={addOnForm.description}
+                    onChange={(e) => setAddOnForm({ ...addOnForm, description: e.target.value })}
+                    className="w-full p-2 border rounded"
+                    rows="2"
+                    placeholder="Optional note for internal reference"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600"
+                >
+                  {saving ? 'Saving...' : editingAddOn ? 'Update Add-on' : 'Add Add-on'}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetAddOnForm}
+                  disabled={saving}
+                  className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                >
+                  {editingAddOn ? 'Cancel' : 'Clear'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
 
         {/* RIGHT COLUMN: Services List */}
         <div>
           <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-lg font-semibold mb-4">All Services ({services.length})</h2>
+            <h2 className="text-lg font-semibold mb-4">
+              All Services ({filteredServices.length}{searchTerm.trim() ? ` of ${regularServices.length}` : ''})
+            </h2>
             
             <div className="mb-4">
               <input
                 type="text"
                 placeholder="Search services..."
                 className="w-full p-2 border rounded"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
-              {services.length === 0 ? (
-                <p className="text-gray-500">No services yet.</p>
+              {filteredServices.length === 0 ? (
+                <p className="text-gray-500">
+                  {searchTerm.trim() ? 'No matching services found.' : 'No services yet.'}
+                </p>
               ) : (
-                services.map(service => (
+                filteredServices.map(service => (
                   <div key={service.id} className="border p-3 rounded hover:bg-gray-50">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
@@ -579,23 +833,101 @@ export default function AdminServicesPage() {
               )}
             </div>
           </div>
+
+          <div className="bg-white p-6 rounded-lg shadow-md mt-4">
+            <h2 className="text-lg font-semibold mb-4">
+              All Add-ons ({filteredAddOns.length}{addOnSearchTerm.trim() ? ` of ${addOns.length}` : ''})
+            </h2>
+
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="Search add-ons..."
+                className="w-full p-2 border rounded"
+                value={addOnSearchTerm}
+                onChange={(e) => setAddOnSearchTerm(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-3 max-h-[380px] overflow-y-auto">
+              {filteredAddOns.length === 0 ? (
+                <p className="text-gray-500">
+                  {addOnSearchTerm.trim() ? 'No matching add-ons found.' : 'No add-ons yet.'}
+                </p>
+              ) : (
+                filteredAddOns.map((addOn) => (
+                  <div key={addOn.id} className="border p-3 rounded hover:bg-gray-50">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        {/*
+                          Add-ons are stored as services. Read pricing from the primary variation to
+                          stay aligned with backend/Stripe variation amounts.
+                        */}
+                        {(() => {
+                          const baseVariation = Array.isArray(addOn.variations) && addOn.variations.length > 0
+                            ? addOn.variations[0]
+                            : null;
+                          const priceLabel = `$${(Number(baseVariation?.price || 0) / 100).toFixed(2)}`;
+                          const durationMin = Math.round(Number(baseVariation?.duration || 0) / 60000);
+
+                          return (
+                            <>
+                        <div className="font-medium">{addOn.name}</div>
+                        <div className="text-sm text-gray-600">{addOn.appliesToCategory || 'Unassigned category'}</div>
+                        <div className="text-sm">
+                          <span className="text-green-600">{priceLabel}</span>
+                          <span className="text-gray-500 ml-2">• +{durationMin} min</span>
+                        </div>
+                            </>
+                          );
+                        })()}
+                        {addOn.description ? (
+                          <div className="text-xs text-gray-500 mt-1">{addOn.description}</div>
+                        ) : null}
+                      </div>
+                      <div className="flex gap-1 ml-2">
+                        <button
+                          onClick={() => handleEditAddOn(addOn)}
+                          className="text-blue-500 hover:text-blue-700 text-sm px-2 py-1"
+                          title="Edit add-on"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAddOn(addOn.id)}
+                          className="text-red-500 hover:text-red-700 text-sm px-2 py-1"
+                          title="Delete add-on"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
           
           {/* Stats */}
           <div className="bg-white p-6 rounded-lg shadow-md mt-4">
             <h3 className="text-lg font-semibold mb-3">Statistics</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-blue-50 p-3 rounded">
-                <div className="text-2xl font-bold text-blue-600">{services.length}</div>
+                <div className="text-2xl font-bold text-blue-600">{regularServices.length}</div>
                 <div className="text-sm text-gray-600">Total Services</div>
               </div>
               <div className="bg-green-50 p-3 rounded">
                 <div className="text-2xl font-bold text-green-600">
-                  {services.reduce((sum, service) => sum + (service.variations?.length || 1), 0)}
+                  {regularServices.reduce((sum, service) => sum + (service.variations?.length || 1), 0)}
                 </div>
                 <div className="text-sm text-gray-600">Total Options</div>
               </div>
+              <div className="bg-indigo-50 p-3 rounded col-span-2">
+                <div className="text-2xl font-bold text-indigo-600">{addOns.length}</div>
+                <div className="text-sm text-gray-600">Total Add-ons</div>
+              </div>
               {categories.map(cat => {
-                const count = services.filter(s => s.category === cat).length;
+                const count = regularServices.filter(s => s.category === cat).length;
                 if (count > 0) {
                   return (
                     <div key={cat} className="bg-gray-50 p-2 rounded col-span-2">

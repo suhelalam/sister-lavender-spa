@@ -20,7 +20,7 @@ export default function AdminDashboard() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
   if (loadingAuth) return <p className="text-center mt-10">Checking authentication...</p>;
 
@@ -53,12 +53,13 @@ export default function AdminDashboard() {
           </div>
         </Link>
 
-        {/* Add more admin features as needed */}
-        <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
-          <div className="text-3xl mb-3">📊</div>
-          <h2 className="text-xl font-semibold mb-2">Analytics (Coming Soon)</h2>
-          <p className="text-gray-600">Service popularity and booking trends</p>
-        </div>
+        <Link href="/admin/analytics">
+          <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition cursor-pointer border border-gray-200">
+            <div className="text-3xl mb-3">📊</div>
+            <h2 className="text-xl font-semibold mb-2">Analytics</h2>
+            <p className="text-gray-600">Customer trends, busy periods, and popular services</p>
+          </div>
+        </Link>
 
         <Link href="/admin/settings">
           <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition cursor-pointer border border-gray-200">

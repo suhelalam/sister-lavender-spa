@@ -197,7 +197,7 @@ export default function SelectTimePage() {
         </div>
 
         {/* RIGHT: Appointment Summary */}
-        <div className="w-full lg:w-96">
+        <div className="w-full lg:w-80">
           <AppointmentSummary selectedSlot={selectedSlot} />
         </div>
       </div>
