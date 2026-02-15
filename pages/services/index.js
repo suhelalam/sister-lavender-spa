@@ -6,9 +6,22 @@ import ServiceCard from '../../components/ServiceCard';
 import AppointmentSummary from '../../components/AppointmentSummary';
 import { serviceCategories } from '../../lib/servicesData';
 
+const normalizeCategoryText = (value = '') =>
+  String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
 const getCategorySlugByName = (categoryName = '') => {
+  const normalizedInput = normalizeCategoryText(categoryName);
   const category = serviceCategories.find(
-    (cat) => cat.title.includes(categoryName) || categoryName.includes(cat.title)
+    (cat) => {
+      const normalizedTitle = normalizeCategoryText(cat.title);
+      return (
+        normalizedTitle === normalizedInput ||
+        normalizedTitle.includes(normalizedInput) ||
+        normalizedInput.includes(normalizedTitle)
+      );
+    }
   );
   return category?.slug || null;
 };
