@@ -39,7 +39,8 @@ function HomeContent() {
   return (
     <>
       <Head>
-        <title>Sister Lavender Spa</title>
+        <title>Sister Lavender Spa - Head Spa, Massage, and Nail Services</title>
+        <meta name="description" content="Relax and rejuvenate at Sister Lavender Spa. We offer professional head spa treatments, therapeutic massages, and expert nail services in Chicago. Book your appointment today!" />
         <link rel="icon" href="/favicon-96x96.png" />
       </Head>
 
@@ -55,7 +56,7 @@ function HomeContent() {
         />
 
         <h1 className="text-5xl font-bold mb-4 text-purple-700">
-          Welcome to Sister Lavender Spa
+          Experience Head Spa, Massage, and Nail Services at Sister Lavender Spa
         </h1>
         <p className="text-lg text-gray-700 mb-6 max-w-xl">
           ✨ Relaxation and Beauty from Scalp to Sole ✨
