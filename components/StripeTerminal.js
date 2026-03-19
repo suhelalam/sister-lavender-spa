@@ -17,6 +17,13 @@ export default function StripeTerminal() {
   const [loadingStripeItems, setLoadingStripeItems] = useState(true);
   const [stripeItemsError, setStripeItemsError] = useState(null);
   const [cartPreviewShown, setCartPreviewShown] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('card'); // 'card' or 'cash'
+  const [receipt, setReceipt] = useState(null); // Store receipt data for display
+  const [customerSearchQuery, setCustomerSearchQuery] = useState(''); // Email, phone, or name search
+  const [selectedCustomer, setSelectedCustomer] = useState(null); // Selected customer object
+  const [searchingCustomer, setSearchingCustomer] = useState(false);
+  const [customerSearchError, setCustomerSearchError] = useState(null);
+  const [searchResults, setSearchResults] = useState([]); // Multiple results from name search
 
   // Track the active PI so we can cancel it
   const [activePaymentIntentId, setActivePaymentIntentId] = useState(null);
@@ -64,7 +71,7 @@ export default function StripeTerminal() {
   const amountAfterDiscount = baseAmount - discountAmount;
 
   const amountAfterDiscountCents = Math.max(0, Math.round(amountAfterDiscount * 100));
-  const feeAmountCents = includeFee ? Math.max(0, Math.round(amountAfterDiscountCents * 0.03)) : 0;
+  const feeAmountCents = includeFee && paymentMethod === 'card' ? Math.max(0, Math.round(amountAfterDiscountCents * 0.03)) : 0;
   const finalChargeAmount = amountAfterDiscountCents + feeAmountCents;
   const feeAmount = feeAmountCents / 100;
   const displayAmount = finalChargeAmount / 100;
@@ -199,6 +206,71 @@ export default function StripeTerminal() {
     setIncludeFee(true);
     setSelectedCouponId('');
     setCartPreviewShown(false);
+    setReceipt(null);
+    setSearchResults([]);
+  };
+
+  // ----- Search for customer by email, phone, or name -----
+  const searchCustomer = async () => {
+    if (!customerSearchQuery.trim()) {
+      setCustomerSearchError('Please enter email, phone, or name');
+      return;
+    }
+
+    setSearchingCustomer(true);
+    setCustomerSearchError(null);
+    setSearchResults([]);
+    
+    try {
+      // Determine search type
+      let searchType = 'name'; // default to name
+      let searchParam = 'name';
+
+      if (customerSearchQuery.includes('@')) {
+        searchType = 'email';
+        searchParam = 'email';
+      } else if (/^\d/.test(customerSearchQuery.replace(/\D/g, ''))) {
+        // Likely a phone number (starts with digit after removing non-digits)
+        searchType = 'phone';
+        searchParam = 'phone';
+      }
+
+      const resp = await fetch(
+        `/api/register-cash-payment?${new URLSearchParams({
+          [searchParam]: customerSearchQuery,
+        })}`
+      );
+
+      if (!resp.ok) throw new Error(await resp.text());
+      const data = await resp.json();
+
+      if (data.customerFound) {
+        if (data.multipleMatches) {
+          // Multiple name matches found - let user pick
+          setSearchResults(data.customers);
+          setCustomerSearchError(null);
+        } else {
+          // Single match found
+          setSelectedCustomer({
+            id: data.customer.id,
+            email: data.customer.email,
+            phone: data.customer.phone,
+            name: data.customer.name || 'Stripe Customer',
+          });
+          setSearchResults([]);
+          setCustomerSearchError(null);
+        }
+      } else {
+        setSelectedCustomer(null);
+        setSearchResults([]);
+        setCustomerSearchError(`Customer not found in Stripe by ${searchType}`);
+      }
+    } catch (error) {
+      console.error('Customer search failed:', error);
+      setCustomerSearchError('Failed to search for customer');
+    } finally {
+      setSearchingCustomer(false);
+    }
   };
 
   const addSelectedService = () => {
@@ -281,6 +353,92 @@ export default function StripeTerminal() {
       alert('Cancel failed: ' + (error.message || String(error)));
     } finally {
       setIsCanceling(false);
+    }
+  };
+
+  // ----- Handle cash payment -----
+  const handleCashPayment = async () => {
+    setPaymentStatus(null);
+    if (baseAmount <= 0) {
+      alert('Please enter a valid amount');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const selectedCoupon = coupons.find((coupon) => coupon.id === selectedCouponId) || null;
+      const baseServiceLines =
+        selectedServices.length > 0
+          ? selectedServices.map((service) => ({
+              name: service.name,
+              amount: Math.max(0, Math.round(Number(service.amount || 0))),
+              quantity: Math.max(1, Math.round(Number(service.quantity || 1))),
+            }))
+          : manualAmount > 0
+            ? [
+                {
+                  name: 'Custom amount',
+                  amount: Math.max(0, Math.round(manualAmount * 100)),
+                  quantity: 1,
+                },
+              ]
+            : [];
+
+      const additionalChargeCents = Math.max(0, Math.round(additionalChargeAmount * 100));
+      const servicesForReceipt =
+        additionalChargeCents > 0
+          ? [
+              ...baseServiceLines,
+              {
+                name: 'Custom add-on',
+                amount: additionalChargeCents,
+                quantity: 1,
+              },
+            ]
+          : baseServiceLines;
+
+      // Register cash payment
+      const resp = await fetch('/api/register-cash-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: finalChargeAmount,
+          services: servicesForReceipt,
+          couponCode: selectedCoupon?.code || '',
+          discountAmount: discountAmount,
+          stripeCustomerId: selectedCustomer?.id || null,
+          customerEmail: selectedCustomer?.email || null,
+          customerPhone: selectedCustomer?.phone || null,
+          customerName: selectedCustomer?.name || null,
+        }),
+      });
+
+      if (!resp.ok) throw new Error(await resp.text());
+      const data = await resp.json();
+
+      // Set receipt data for display
+      setReceipt({
+        receiptNumber: data.receiptNumber,
+        timestamp: new Date(data.timestamp).toLocaleString(),
+        amount: displayAmount,
+        services: servicesForReceipt,
+        discountAmount: discountAmount,
+        subtotal: amountAfterDiscount,
+        customerName: selectedCustomer?.name || null,
+        customerEmail: selectedCustomer?.email || null,
+      });
+
+      setPaymentStatus({ type: 'success', text: 'Cash payment registered. Receipt generated.' });
+      resetForm();
+      setPaymentMethod('card'); // Reset to card for next transaction
+      setSelectedCustomer(null); // Clear customer selection
+      setCustomerSearchQuery(''); // Clear search query
+    } catch (error) {
+      console.error('Cash payment failed:', error);
+      alert('Failed to register cash payment: ' + (error.message || String(error)));
+      setPaymentStatus({ type: 'error', text: 'Failed to register cash payment.' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -449,6 +607,162 @@ export default function StripeTerminal() {
     <div className="p-6 border rounded-lg bg-white max-w-md mx-auto">
       <h2 className="text-2xl font-bold mb-4 text-purple-700">Stripe Terminal</h2>
 
+      {/* Receipt Display */}
+      {receipt && (
+        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+          <h3 className="text-lg font-bold text-green-700 mb-2">Cash Payment Receipt</h3>
+          <div className="space-y-1 text-sm">
+            <p><strong>Receipt #:</strong> {receipt.receiptNumber}</p>
+            <p><strong>Date/Time:</strong> {receipt.timestamp}</p>
+            {receipt.customerName && (
+              <>
+                <hr className="my-2" />
+                <p><strong>Customer:</strong> {receipt.customerName}</p>
+                {receipt.customerEmail && <p className="text-gray-600">{receipt.customerEmail}</p>}
+              </>
+            )}
+            <hr className="my-2" />
+            {receipt.services.map((service, idx) => (
+              <div key={idx} className="flex justify-between">
+                <span>{service.name} x {service.quantity}</span>
+                <span>${(service.amount / 100).toFixed(2)}</span>
+              </div>
+            ))}
+            {receipt.discountAmount > 0 && (
+              <div className="flex justify-between text-green-600">
+                <span>Discount</span>
+                <span>-${receipt.discountAmount.toFixed(2)}</span>
+              </div>
+            )}
+            <hr className="my-2" />
+            <div className="flex justify-between font-bold text-lg">
+              <span>Total Paid:</span>
+              <span>${receipt.amount.toFixed(2)}</span>
+            </div>
+          </div>
+          <button
+            onClick={() => window.print()}
+            className="w-full mt-3 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700"
+          >
+            Print Receipt
+          </button>
+          <button
+            onClick={() => setReceipt(null)}
+            className="w-full mt-2 bg-gray-300 text-gray-800 px-3 py-2 rounded text-sm hover:bg-gray-400"
+          >
+            Close Receipt
+          </button>
+        </div>
+      )}
+
+      {/* Payment Method Selection */}
+      <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+        <h3 className="font-semibold mb-3">Payment Method</h3>
+        <div className="flex gap-4">
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="radio"
+              name="paymentMethod"
+              value="card"
+              checked={paymentMethod === 'card'}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              disabled={isLoading || isCanceling}
+              className="mr-2"
+            />
+            <span className="text-sm">Card Payment</span>
+          </label>
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="radio"
+              name="paymentMethod"
+              value="cash"
+              checked={paymentMethod === 'cash'}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              disabled={isLoading || isCanceling}
+              className="mr-2"
+            />
+            <span className="text-sm">Cash Payment</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Customer Lookup (Optional) */}
+      <div className="mb-6 p-4 border rounded-lg bg-blue-50">
+        <h3 className="font-semibold mb-3">Attach to Customer (Optional)</h3>
+        <div className="space-y-2">
+          <p className="text-xs text-gray-600">Search by email, phone, or name</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={customerSearchQuery}
+              onChange={(e) => setCustomerSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && searchCustomer()}
+              placeholder="Email, phone, or name"
+              className="flex-1 p-2 border rounded text-sm"
+              disabled={searchingCustomer || isLoading}
+            />
+            <button
+              onClick={searchCustomer}
+              disabled={searchingCustomer || isLoading || !customerSearchQuery.trim()}
+              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-60"
+            >
+              {searchingCustomer ? 'Searching...' : 'Search'}
+            </button>
+            {selectedCustomer && (
+              <button
+                onClick={() => {
+                  setSelectedCustomer(null);
+                  setCustomerSearchQuery('');
+                  setSearchResults([]);
+                }}
+                className="bg-gray-400 text-white px-3 py-2 rounded text-sm hover:bg-gray-500"
+                title="Clear customer selection"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {customerSearchError && (
+            <p className="text-xs text-red-600">{customerSearchError}</p>
+          )}
+
+          {/* Multiple results found - let user pick */}
+          {searchResults.length > 0 && (
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded space-y-2">
+              <p className="text-xs font-semibold text-yellow-800">Multiple customers found. Select one:</p>
+              {searchResults.map((customer) => (
+                <button
+                  key={customer.id}
+                  onClick={() => {
+                    setSelectedCustomer({
+                      id: customer.id,
+                      email: customer.email,
+                      phone: customer.phone,
+                      name: customer.name || 'Stripe Customer',
+                    });
+                    setSearchResults([]);
+                  }}
+                  className="w-full text-left p-2 bg-white border border-yellow-200 rounded hover:bg-yellow-100 text-sm transition"
+                >
+                  <div className="font-semibold text-yellow-900">{customer.name}</div>
+                  <div className="text-xs text-gray-600">
+                    {customer.email || customer.phone}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {selectedCustomer && searchResults.length === 0 && (
+            <div className="p-3 bg-green-100 border border-green-300 rounded text-sm">
+              <p className="font-semibold text-green-800">{selectedCustomer.name}</p>
+              <p className="text-green-700 text-xs">{selectedCustomer.email || selectedCustomer.phone}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Amount Input */}
       <div className="mb-4">
         <label className="block text-sm font-medium mb-2">Select Service (Stripe)</label>
@@ -607,8 +921,14 @@ export default function StripeTerminal() {
 
         {/* 3% Fee Always Included */}
         <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
-          <span className="text-sm font-medium">Card processing fee (3%)</span>
-          {baseAmount > 0 && <span className="text-sm text-gray-600">+${feeAmount.toFixed(2)}</span>}
+          <span className="text-sm font-medium">
+            Card processing fee {paymentMethod === 'card' ? '(3%)' : '(Cash - No Fee)'}
+          </span>
+          {baseAmount > 0 && (
+            <span className="text-sm text-gray-600">
+              {paymentMethod === 'card' ? `+$${feeAmount.toFixed(2)}` : 'No fee'}
+            </span>
+          )}
         </div>
 
         {/* Amount Summary */}
@@ -662,61 +982,63 @@ export default function StripeTerminal() {
         )}
       </div>
 
-      {/* Reader Selection (server-driven) */}
-      <div className="mb-6">
-        <h3 className="font-semibold mb-3">Card Reader</h3>
+      {/* Reader Selection (server-driven) - Only for Card Payments */}
+      {paymentMethod === 'card' && (
+        <div className="mb-6">
+          <h3 className="font-semibold mb-3">Card Reader</h3>
 
-        {loadingReaders ? (
-          <div className="p-4 border rounded-lg bg-gray-50 text-center text-gray-600">
-            Loading readers...
-          </div>
-        ) : readersError ? (
-          <div className="p-4 border rounded-lg bg-red-50 border-red-200">
-            <p className="text-red-600 text-sm">Failed to load readers: {readersError}</p>
-            <button
-              onClick={refreshReaders}
-              className="mt-2 bg-purple-600 text-white px-4 py-2 rounded text-sm"
-              disabled={isLoading || isCanceling}
-            >
-              Retry
-            </button>
-          </div>
-        ) : readers.length === 0 ? (
-          <div className="p-4 border rounded-lg bg-gray-50 text-center">
-            <p className="text-gray-600">No readers found in Stripe.</p>
-            <button
-              onClick={refreshReaders}
-              className="mt-2 bg-purple-600 text-white px-4 py-2 rounded text-sm"
-              disabled={isLoading || isCanceling}
-            >
-              Refresh
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <select
-              value={selectedReaderId}
-              onChange={(e) => setSelectedReaderId(e.target.value)}
-              className="w-full p-3 border rounded-lg"
-              disabled={isLoading || isCanceling}
-            >
-              {readers.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label || r.device_type || 'Reader'} — {r.id}
-                </option>
-              ))}
-            </select>
+          {loadingReaders ? (
+            <div className="p-4 border rounded-lg bg-gray-50 text-center text-gray-600">
+              Loading readers...
+            </div>
+          ) : readersError ? (
+            <div className="p-4 border rounded-lg bg-red-50 border-red-200">
+              <p className="text-red-600 text-sm">Failed to load readers: {readersError}</p>
+              <button
+                onClick={refreshReaders}
+                className="mt-2 bg-purple-600 text-white px-4 py-2 rounded text-sm"
+                disabled={isLoading || isCanceling}
+              >
+                Retry
+              </button>
+            </div>
+          ) : readers.length === 0 ? (
+            <div className="p-4 border rounded-lg bg-gray-50 text-center">
+              <p className="text-gray-600">No readers found in Stripe.</p>
+              <button
+                onClick={refreshReaders}
+                className="mt-2 bg-purple-600 text-white px-4 py-2 rounded text-sm"
+                disabled={isLoading || isCanceling}
+              >
+                Refresh
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <select
+                value={selectedReaderId}
+                onChange={(e) => setSelectedReaderId(e.target.value)}
+                className="w-full p-3 border rounded-lg"
+                disabled={isLoading || isCanceling}
+              >
+                {readers.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label || r.device_type || 'Reader'} — {r.id}
+                  </option>
+                ))}
+              </select>
 
-            <button
-              onClick={refreshReaders}
-              className="w-full bg-purple-600 text-white p-3 rounded-lg hover:bg-purple-700 transition disabled:opacity-60"
-              disabled={isLoading || isCanceling}
-            >
-              Refresh Readers
-            </button>
-          </div>
-        )}
-      </div>
+              <button
+                onClick={refreshReaders}
+                className="w-full bg-purple-600 text-white p-3 rounded-lg hover:bg-purple-700 transition disabled:opacity-60"
+                disabled={isLoading || isCanceling}
+              >
+                Refresh Readers
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Payment Buttons */}
       <div className="space-y-3">
@@ -734,26 +1056,38 @@ export default function StripeTerminal() {
           </div>
         )}
 
-        <button
-          onClick={handlePayment}
-          disabled={!selectedReaderId || baseAmount <= 0 || isLoading || isCanceling}
-          className="w-full bg-green-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-green-700 transition"
-        >
-          {isLoading
-            ? 'Sending to reader...'
-            : selectedServices.length > 0 && !cartPreviewShown
-              ? `Show Services on Reader ($${displayAmount.toFixed(2)})`
-              : `Charge $${displayAmount.toFixed(2) || '0.00'}`}
-        </button>
+        {paymentMethod === 'card' ? (
+          <>
+            <button
+              onClick={handlePayment}
+              disabled={!selectedReaderId || baseAmount <= 0 || isLoading || isCanceling}
+              className="w-full bg-green-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-green-700 transition"
+            >
+              {isLoading
+                ? 'Sending to reader...'
+                : selectedServices.length > 0 && !cartPreviewShown
+                  ? `Show Services on Reader ($${displayAmount.toFixed(2)})`
+                  : `Charge $${displayAmount.toFixed(2) || '0.00'}`}
+            </button>
 
-        {/* Cancel Button - show when we have an active PI to cancel */}
-        {(activePaymentIntentId || cartPreviewShown) && (
+            {/* Cancel Button - show when we have an active PI to cancel */}
+            {(activePaymentIntentId || cartPreviewShown) && (
+              <button
+                onClick={cancelPayment}
+                disabled={isCanceling}
+                className="w-full bg-red-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-red-700 transition"
+              >
+                {isCanceling ? 'Canceling...' : cartPreviewShown && !activePaymentIntentId ? 'Clear Reader Cart' : 'Cancel Payment'}
+              </button>
+            )}
+          </>
+        ) : (
           <button
-            onClick={cancelPayment}
-            disabled={isCanceling}
-            className="w-full bg-red-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-red-700 transition"
+            onClick={handleCashPayment}
+            disabled={baseAmount <= 0 || isLoading}
+            className="w-full bg-blue-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-blue-700 transition"
           >
-            {isCanceling ? 'Canceling...' : cartPreviewShown && !activePaymentIntentId ? 'Clear Reader Cart' : 'Cancel Payment'}
+            {isLoading ? 'Registering...' : `Register Cash Payment - $${displayAmount.toFixed(2) || '0.00'}`}
           </button>
         )}
       </div>
