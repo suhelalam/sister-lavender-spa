@@ -30,13 +30,32 @@ export default async function handler(req, res) {
 
       // Search by phone if email didn't find anything
       if (!stripeCustomer && phone) {
-        const searchResults = await stripe.customers.search({
-          query: `phone:"${phone}"`,
-          limit: 1,
-        });
+        const normalizePhoneForStripe = (rawPhone) => {
+          const digits = (rawPhone || '').replace(/\D/g, '');
+          if (!digits) return null;
+          if (digits.length === 10) return `+1${digits}`;
+          if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+          if (rawPhone.startsWith('00')) return `+${digits.slice(2)}`;
+          return digits.startsWith('+') ? digits : `+${digits}`;
+        };
 
-        if (searchResults.data && searchResults.data.length > 0) {
-          stripeCustomer = searchResults.data[0];
+        const phoneCandidates = [];
+        const raw = phone.trim();
+        const digits = raw.replace(/\D/g, '');
+        if (raw) phoneCandidates.push(raw);
+        if (digits) phoneCandidates.push(digits);
+        const normalized = normalizePhoneForStripe(raw);
+        if (normalized) phoneCandidates.push(normalized);
+
+        for (const candidate of Array.from(new Set(phoneCandidates))) {
+          const searchResults = await stripe.customers.search({
+            query: `phone:"${candidate}"`,
+            limit: 1,
+          });
+          if (searchResults.data && searchResults.data.length > 0) {
+            stripeCustomer = searchResults.data[0];
+            break;
+          }
         }
       }
 

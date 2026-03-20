@@ -40,6 +40,31 @@ export default function StripeTerminal() {
   const [includeFee, setIncludeFee] = useState(true);
   const selectedCoupon = coupons.find((coupon) => coupon.id === selectedCouponId) || null;
 
+  const normalizePhoneForStripe = (rawPhone) => {
+    if (!rawPhone) return null;
+    const digits = rawPhone.replace(/\D/g, '');
+    if (!digits) return null;
+
+    if (digits.length === 10) return `+1${digits}`;
+    if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+    if (rawPhone.startsWith('00')) return `+${digits.slice(2)}`;
+
+    // fallback: prefix plus if not present
+    return digits.startsWith('+') ? digits : `+${digits}`;
+  };
+
+  const formatPhoneDisplay = (rawPhone) => {
+    if (!rawPhone) return '';
+    const digits = rawPhone.replace(/\D/g, '');
+    if (digits.length === 10) {
+      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+    if (digits.length === 11 && digits.startsWith('1')) {
+      return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+    }
+    return rawPhone;
+  };
+
   const filteredStripeItems = useMemo(() => {
     const term = productSearch.trim().toLowerCase();
     if (!term) return stripeItems;
@@ -235,9 +260,18 @@ export default function StripeTerminal() {
         searchParam = 'phone';
       }
 
+      let searchValue = customerSearchQuery.trim();
+      if (searchType === 'phone') {
+        const normalized = normalizePhoneForStripe(searchValue);
+        if (normalized) {
+          searchValue = normalized;
+          setCustomerSearchQuery(formatPhoneDisplay(searchValue));
+        }
+      }
+
       const resp = await fetch(
         `/api/register-cash-payment?${new URLSearchParams({
-          [searchParam]: customerSearchQuery,
+          [searchParam]: searchValue,
         })}`
       );
 
