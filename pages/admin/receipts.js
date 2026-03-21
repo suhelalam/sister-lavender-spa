@@ -78,6 +78,21 @@ const formatCurrencyFromCents = (amountCents) => {
   return `$${(amountCents / 100).toFixed(2)}`;
 };
 
+const formatReceiptDate = (createdUnixSeconds) => {
+  const date = new Date(createdUnixSeconds * 1000);
+  const formatted = date.toLocaleString([], {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  // Keep time and AM/PM together so it doesn't wrap awkwardly.
+  return formatted.replace(/\s(AM|PM)$/i, '\u00A0$1');
+};
+
 const renderServiceLine = (service) => {
   const qty = service.quantity > 1 ? ` x ${service.quantity}` : '';
   const amountText = formatCurrencyFromCents(service.unitAmountCents);
@@ -133,7 +148,7 @@ export default function AdminReceiptsPage() {
   const printReceipt = (transaction) => {
     const services = getServicesFromTransaction(transaction);
     const total = (transaction.amount / 100).toFixed(2);
-    const date = new Date(transaction.created * 1000).toLocaleString();
+    const date = formatReceiptDate(transaction.created);
     const printWindow = window.open('', '_blank', 'width=400,height=700');
     if (!printWindow) return;
 
@@ -300,49 +315,51 @@ export default function AdminReceiptsPage() {
             {filteredTransactions.map((transaction) => {
               const services = getServicesFromTransaction(transaction);
               const total = (transaction.amount / 100).toFixed(2);
-              const date = new Date(transaction.created * 1000).toLocaleString();
+              const date = formatReceiptDate(transaction.created);
               return (
                 <div
                   key={transaction.id}
-                  className="group rounded-2xl border border-white/60 bg-white/90 p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                  className="group flex h-full flex-col rounded-2xl border border-white/60 bg-white/90 p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  <div className="mb-4 flex items-start justify-between gap-2 border-b border-gray-100 pb-3">
-                    <div>
-                      <p className="text-sm font-semibold tracking-wide text-gray-900">Sister Lavender Spa</p>
-                      <p className="text-xs uppercase tracking-[0.2em] text-rose-500">Receipt</p>
-                    </div>
-                    <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-700">
-                      {transaction.currency?.toUpperCase() || 'USD'}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5 text-sm text-gray-700">
-                    <p>
-                      <span className="font-medium text-gray-900">ID:</span>{' '}
-                      <span className="break-all text-xs text-gray-600">{transaction.id}</span>
-                    </p>
-                    <p><span className="font-medium text-gray-900">Date:</span> {date}</p>
-                    <p><span className="font-medium text-gray-900">Customer:</span> {transaction.customer_name || 'N/A'}</p>
-                    <p><span className="font-medium text-gray-900">Email:</span> {transaction.customer_email || transaction.receipt_email || 'N/A'}</p>
-                    <p><span className="font-medium text-gray-900">Phone:</span> {transaction.customer_phone || 'N/A'}</p>
-                  </div>
-
-                  <div className="mt-4 rounded-xl bg-gray-50 p-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Services</p>
-                    {services.length > 0 ? (
-                      <div className="space-y-1.5 text-sm text-gray-800">
-                        {services.map((service, idx) => (
-                          <div key={idx}>{renderServiceLine(service)}</div>
-                        ))}
+                  <div className="flex-1">
+                    <div className="mb-4 flex items-start justify-between gap-2 border-b border-gray-100 pb-3">
+                      <div>
+                        <p className="text-sm font-semibold tracking-wide text-gray-900">Sister Lavender Spa</p>
+                        <p className="text-xs uppercase tracking-[0.2em] text-rose-500">Receipt</p>
                       </div>
-                    ) : (
-                      <div className="text-sm text-gray-500">No service details saved</div>
-                    )}
-                  </div>
+                      <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-700">
+                        {transaction.currency?.toUpperCase() || 'USD'}
+                      </span>
+                    </div>
 
-                  <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
-                    <p className="text-sm text-gray-600">Total</p>
-                    <p className="text-lg font-semibold text-gray-900">${total}</p>
+                    <div className="space-y-1.5 text-sm text-gray-700">
+                      <p>
+                        <span className="font-medium text-gray-900">ID:</span>{' '}
+                        <span className="break-all text-xs text-gray-600">{transaction.id}</span>
+                      </p>
+                      <p><span className="font-medium text-gray-900">Date:</span> {date}</p>
+                      <p><span className="font-medium text-gray-900">Customer:</span> {transaction.customer_name || 'N/A'}</p>
+                      <p><span className="font-medium text-gray-900">Email:</span> {transaction.customer_email || transaction.receipt_email || 'N/A'}</p>
+                      <p><span className="font-medium text-gray-900">Phone:</span> {transaction.customer_phone || 'N/A'}</p>
+                    </div>
+
+                    <div className="mt-4 rounded-xl bg-gray-50 p-3">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Services</p>
+                      {services.length > 0 ? (
+                        <div className="space-y-1.5 text-sm text-gray-800">
+                          {services.map((service, idx) => (
+                            <div key={idx}>{renderServiceLine(service)}</div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No service details saved</div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
+                      <p className="text-sm text-gray-600">Total</p>
+                      <p className="text-lg font-semibold text-gray-900">${total}</p>
+                    </div>
                   </div>
 
                   <button
