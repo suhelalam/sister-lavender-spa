@@ -86,13 +86,35 @@ export default function StripeTerminal() {
   // ----- Amount math -----
   const baseAmount = primaryAmount + additionalChargeAmount;
 
+  const couponAppliesToProductIds = new Set(
+    Array.isArray(selectedCoupon?.applies_to_product_ids)
+      ? selectedCoupon.applies_to_product_ids.filter(Boolean)
+      : []
+  );
+  const hasCouponProductRestrictions = couponAppliesToProductIds.size > 0;
+
+  const eligibleSelectedServicesAmount = selectedServices.reduce((sum, service) => {
+    const serviceLineTotal = (service.amount / 100) * Math.max(1, Number(service.quantity || 1));
+    if (!hasCouponProductRestrictions) return sum + serviceLineTotal;
+    return couponAppliesToProductIds.has(service.product_id) ? sum + serviceLineTotal : sum;
+  }, 0);
+
+  // Coupons apply to selected services. For manual-only sales, unrestricted coupons can apply.
+  // Custom add-on amounts are never coupon-eligible.
+  const couponEligibleAmount =
+    selectedServices.length > 0
+      ? eligibleSelectedServicesAmount
+      : hasCouponProductRestrictions
+        ? 0
+        : manualAmount;
+
   const percentDiscountAmount =
     selectedCoupon?.discount_type === 'percent'
-      ? baseAmount * ((selectedCoupon.percent_off || 0) / 100)
+      ? couponEligibleAmount * ((selectedCoupon.percent_off || 0) / 100)
       : 0;
   const fixedDiscountAmount =
     selectedCoupon?.discount_type === 'amount' ? (selectedCoupon.amount_off || 0) / 100 : 0;
-  const discountAmount = Math.min(baseAmount, percentDiscountAmount + fixedDiscountAmount);
+  const discountAmount = Math.min(couponEligibleAmount, percentDiscountAmount + fixedDiscountAmount);
   const amountAfterDiscount = baseAmount - discountAmount;
 
   const amountAfterDiscountCents = Math.max(0, Math.round(amountAfterDiscount * 100));
@@ -566,6 +588,7 @@ export default function StripeTerminal() {
           services: servicesForCharge,
           coupon_code: selectedCoupon?.code || '',
           discount_amount_cents: Math.max(0, Math.round(discountAmount * 100)),
+          processing_fee_amount_cents: Math.max(0, Math.round(feeAmountCents || 0)),
         }),
       });
 
@@ -599,6 +622,16 @@ export default function StripeTerminal() {
       const paymentResult = await waitForTerminalPaymentResult(piData.payment_intent_id);
 
       if (paymentResult === 'succeeded') {
+        try {
+          await fetch('/api/finalize-terminal-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payment_intent_id: piData.payment_intent_id }),
+          });
+        } catch (finalizeError) {
+          console.warn('Failed to finalize terminal payment breakdown:', finalizeError);
+        }
+
         await clearReaderDisplay(selectedReaderId);
         setPaymentStatus({ type: 'success', text: 'Payment successful.' });
         clearTerminalUiState();
@@ -992,6 +1025,19 @@ export default function StripeTerminal() {
                   Coupon ({selectedCoupon.code}):
                 </span>
                 <span>-${discountAmount.toFixed(2)}</span>
+              </div>
+            )}
+
+            {selectedCoupon && hasCouponProductRestrictions && selectedServices.length > 0 && (
+              <div className="flex justify-between text-xs text-blue-700">
+                <span>Coupon-eligible services:</span>
+                <span>${eligibleSelectedServicesAmount.toFixed(2)}</span>
+              </div>
+            )}
+
+            {selectedCoupon && hasCouponProductRestrictions && couponEligibleAmount <= 0 && (
+              <div className="mt-1 text-xs text-amber-700">
+                This coupon does not apply to the currently selected services.
               </div>
             )}
 

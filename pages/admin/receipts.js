@@ -31,19 +31,47 @@ const normalizeService = (service) => {
 
   const quantity = Math.max(1, Number(service.quantity || 1));
   const amountRaw = Number(service.amount);
+  const unitAmountRaw = Number(service.unit_amount);
+  const unitAmountCentsRaw = Number(service.unit_amount_cents);
+  const unitAmountAltRaw = Number(service.unitAmountCents);
   const priceRaw = Number(service.price);
+  const lineAmountRaw = Number(service.total);
+  const lineAmountCentsRaw = Number(service.total_amount_cents);
+  const lineAmountAltRaw = Number(service.line_total);
 
   let unitAmountCents = null;
   if (Number.isFinite(amountRaw) && amountRaw >= 0) {
     unitAmountCents = Math.round(amountRaw);
+  } else if (Number.isFinite(unitAmountRaw) && unitAmountRaw >= 0) {
+    unitAmountCents = Math.round(unitAmountRaw);
+  } else if (Number.isFinite(unitAmountCentsRaw) && unitAmountCentsRaw >= 0) {
+    unitAmountCents = Math.round(unitAmountCentsRaw);
+  } else if (Number.isFinite(unitAmountAltRaw) && unitAmountAltRaw >= 0) {
+    unitAmountCents = Math.round(unitAmountAltRaw);
   } else if (Number.isFinite(priceRaw) && priceRaw >= 0) {
     unitAmountCents = Math.round(priceRaw * 100);
   }
 
-  return { name, quantity, unitAmountCents };
+  let lineTotalCents = null;
+  if (Number.isFinite(lineAmountRaw) && lineAmountRaw >= 0) {
+    lineTotalCents = Math.round(lineAmountRaw);
+  } else if (Number.isFinite(lineAmountCentsRaw) && lineAmountCentsRaw >= 0) {
+    lineTotalCents = Math.round(lineAmountCentsRaw);
+  } else if (Number.isFinite(lineAmountAltRaw) && lineAmountAltRaw >= 0) {
+    lineTotalCents = Math.round(lineAmountAltRaw);
+  } else if (Number.isFinite(unitAmountCents) && unitAmountCents >= 0) {
+    lineTotalCents = Math.round(unitAmountCents * quantity);
+  }
+
+  return { name, quantity, unitAmountCents, lineTotalCents };
 };
 
 const getServicesFromTransaction = (transaction) => {
+  if (Array.isArray(transaction?.stored_services) && transaction.stored_services.length > 0) {
+    const normalizedStored = transaction.stored_services.map(normalizeService).filter(Boolean);
+    if (normalizedStored.length > 0) return normalizedStored;
+  }
+
   const metadata = transaction?.metadata || {};
   const rawServices = metadata.services;
 
@@ -93,22 +121,31 @@ const formatReceiptDate = (createdUnixSeconds) => {
   return formatted.replace(/\s(AM|PM)$/i, '\u00A0$1');
 };
 
-const renderServiceLine = (service) => {
+const getServiceAmountCents = (service) => {
+  const lineTotalCents = Number(service?.lineTotalCents);
+  if (Number.isFinite(lineTotalCents) && lineTotalCents >= 0) return Math.round(lineTotalCents);
+
+  const unitAmountCents = Number(service?.unitAmountCents);
+  const quantity = Math.max(1, Number(service?.quantity || 1));
+  if (!Number.isFinite(unitAmountCents) || unitAmountCents < 0) return null;
+  return Math.round(unitAmountCents * quantity);
+};
+
+const getServiceLabel = (service) => {
+  const normalizedName = normalizeNameKey(service?.name);
+  if (normalizedName === 'custom amount' || normalizedName === 'custom add-on') {
+    return 'Custom add-on';
+  }
   const qty = service.quantity > 1 ? ` x ${service.quantity}` : '';
-  const amountText = formatCurrencyFromCents(service.unitAmountCents);
-  return amountText
-    ? `${service.name}${qty} - ${amountText}`
-    : `${service.name}${qty}`;
+  return `${service.name}${qty}`;
 };
 
 const isProcessingFeeService = (name) =>
   String(name || '').trim().toLowerCase() === 'processing fee (3%)';
 
 const getServiceLineTotalCents = (service) => {
-  const unitAmountCents = Number(service?.unitAmountCents);
-  const quantity = Math.max(1, Number(service?.quantity || 1));
-  if (!Number.isFinite(unitAmountCents) || unitAmountCents < 0) return 0;
-  return Math.round(unitAmountCents * quantity);
+  const amountCents = getServiceAmountCents(service);
+  return Number.isFinite(amountCents) ? amountCents : 0;
 };
 
 const getReceiptBreakdown = (transaction, services) => {
@@ -116,29 +153,45 @@ const getReceiptBreakdown = (transaction, services) => {
     .filter((service) => !isProcessingFeeService(service.name))
     .reduce((sum, service) => sum + getServiceLineTotalCents(service), 0);
 
-  const processingFeeCents = services
+  const processingFeeFromLinesCents = services
     .filter((service) => isProcessingFeeService(service.name))
     .reduce((sum, service) => sum + getServiceLineTotalCents(service), 0);
+  const processingFeeFromApi = Number(transaction?.processing_fee_amount_cents);
+  const processingFeeCents =
+    processingFeeFromLinesCents > 0
+      ? processingFeeFromLinesCents
+      : Number.isFinite(processingFeeFromApi) && processingFeeFromApi >= 0
+        ? Math.round(processingFeeFromApi)
+        : 0;
 
   const discountAmountCents = Math.max(0, Number(transaction?.discount_amount_cents || 0));
   const tipAmountCents = Math.max(0, Number(transaction?.tip_amount_cents || 0));
   const totalCents = Math.max(0, Number(transaction?.amount || 0));
+  const preTipAmountFromApi = Number(transaction?.pre_tip_amount_cents);
+  const preTipAmountCents =
+    Number.isFinite(preTipAmountFromApi) && preTipAmountFromApi >= 0
+      ? Math.round(preTipAmountFromApi)
+      : Math.max(0, totalCents - tipAmountCents);
 
   return {
     servicesSubtotalCents,
     processingFeeCents,
     discountAmountCents,
     tipAmountCents,
+    preTipAmountCents,
     totalCents,
     couponCode: String(transaction?.coupon_code || '').trim(),
   };
 };
+
+const normalizeNameKey = (value) => String(value || '').trim().toLowerCase();
 
 export default function AdminReceiptsPage() {
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState([]);
+  const [servicePriceMap, setServicePriceMap] = useState({});
   const [dayFilter, setDayFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const router = useRouter();
@@ -178,8 +231,91 @@ export default function AdminReceiptsPage() {
     loadTransactions();
   }, [loadingAuth]);
 
+  useEffect(() => {
+    if (loadingAuth) return;
+
+    const loadServicePrices = async () => {
+      try {
+        const response = await fetch('/api/list-terminal-products');
+        if (!response.ok) return;
+        const data = await response.json();
+        const items = Array.isArray(data.items) ? data.items : [];
+
+        const nextMap = {};
+        items.forEach((item) => {
+          const key = normalizeNameKey(item.name);
+          const amount = Number(item.amount);
+          if (!key || !Number.isFinite(amount) || amount < 0) return;
+          // Keep the lowest known active price for fallback display.
+          if (!Number.isFinite(nextMap[key]) || amount < nextMap[key]) {
+            nextMap[key] = Math.round(amount);
+          }
+        });
+        setServicePriceMap(nextMap);
+      } catch (error) {
+        console.error('Error loading service prices for receipt fallback:', error);
+      }
+    };
+
+    loadServicePrices();
+  }, [loadingAuth]);
+
+  const withResolvedServicePrices = (services) =>
+    services.map((service) => {
+      if (Number.isFinite(service?.lineTotalCents) || Number.isFinite(service?.unitAmountCents)) {
+        return service;
+      }
+      const fallbackUnitAmountCents = servicePriceMap[normalizeNameKey(service?.name)];
+      if (!Number.isFinite(fallbackUnitAmountCents)) return service;
+      const quantity = Math.max(1, Number(service?.quantity || 1));
+      return {
+        ...service,
+        unitAmountCents: Math.round(fallbackUnitAmountCents),
+        lineTotalCents: Math.round(fallbackUnitAmountCents * quantity),
+      };
+    });
+
+  const withReconciledServiceTotals = (services, transaction) => {
+    const resolved = withResolvedServicePrices(services).map((service) => ({ ...service }));
+    const preTip = Number(transaction?.pre_tip_amount_cents);
+    if (!Number.isFinite(preTip) || preTip < 0) return resolved;
+
+    const discount = Math.max(0, Number(transaction?.discount_amount_cents || 0));
+    const expectedLinesTotal = Math.round(preTip + discount);
+
+    let knownTotal = 0;
+    const missingIndexes = [];
+    resolved.forEach((service, idx) => {
+      const amountCents = getServiceAmountCents(service);
+      if (Number.isFinite(amountCents)) {
+        knownTotal += amountCents;
+      } else {
+        missingIndexes.push(idx);
+      }
+    });
+
+    const remainder = expectedLinesTotal - knownTotal;
+    if (remainder <= 0 || missingIndexes.length === 0) return resolved;
+
+    let targetIndex = missingIndexes.find((idx) =>
+      normalizeNameKey(resolved[idx]?.name).includes('custom add-on')
+    );
+    if (targetIndex === undefined) {
+      targetIndex = missingIndexes.find((idx) =>
+        normalizeNameKey(resolved[idx]?.name).includes('custom amount')
+      );
+    }
+    if (targetIndex === undefined && missingIndexes.length === 1) {
+      targetIndex = missingIndexes[0];
+    }
+    if (targetIndex === undefined) return resolved;
+
+    resolved[targetIndex].lineTotalCents = Math.round(remainder);
+    return resolved;
+  };
+
   const printReceipt = (transaction) => {
-    const services = getServicesFromTransaction(transaction);
+    const services = withReconciledServiceTotals(getServicesFromTransaction(transaction), transaction);
     const breakdown = getReceiptBreakdown(transaction, services);
     const total = (breakdown.totalCents / 100).toFixed(2);
     const date = formatReceiptDate(transaction.created);
@@ -193,6 +329,9 @@ export default function AdminReceiptsPage() {
           <style>
             body { font-family: monospace; font-size: 12px; width: 80mm; margin: 0; padding: 10px; }
             .header { text-align: center; margin-bottom: 10px; }
+            .service-row { margin: 5px 0; display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+            .service-name { flex: 1; }
+            .service-price { background: #fff1f2; color: #be123c; font-weight: 700; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
             .service { margin: 5px 0; }
             .total { font-weight: bold; margin-top: 10px; }
             @media print { body { width: 80mm; } }
@@ -212,32 +351,21 @@ export default function AdminReceiptsPage() {
             <strong>Services:</strong>
             ${
               services.length > 0
-                ? services.map((service) => `<div class="service">${renderServiceLine(service)}</div>`).join('')
+                ? services
+                    .map((service) => {
+                      const amountText = formatCurrencyFromCents(getServiceAmountCents(service)) || '—';
+                      return `<div class="service-row"><span class="service-name">${getServiceLabel(service)}</span><span class="service-price">${amountText}</span></div>`;
+                    })
+                    .join('')
                 : '<div class="service">No service details saved</div>'
             }
           </div>
           <div style="margin-top:10px; border-top:1px solid #ddd; padding-top:8px;">
             <div class="service">Services subtotal: ${formatCurrencyFromCents(breakdown.servicesSubtotalCents) || '$0.00'}</div>
-            ${
-              breakdown.processingFeeCents > 0
-                ? `<div class="service">Processing fee: ${formatCurrencyFromCents(breakdown.processingFeeCents)}</div>`
-                : ''
-            }
-            ${
-              breakdown.discountAmountCents > 0
-                ? `<div class="service">Coupon${breakdown.couponCode ? ` (${breakdown.couponCode})` : ''}: -${(breakdown.discountAmountCents / 100).toFixed(2)}</div>`
-                : ''
-            }
-            ${
-              breakdown.discountAmountCents === 0 && breakdown.couponCode
-                ? `<div class="service">Coupon (${breakdown.couponCode}): applied</div>`
-                : ''
-            }
-            ${
-              breakdown.tipAmountCents > 0
-                ? `<div class="service">Tip: ${formatCurrencyFromCents(breakdown.tipAmountCents)}</div>`
-                : ''
-            }
+            <div class="service">Processing fee: ${formatCurrencyFromCents(breakdown.processingFeeCents) || '$0.00'}</div>
+            <div class="service">Coupon${breakdown.couponCode ? ` (${breakdown.couponCode})` : ''}: -${formatCurrencyFromCents(breakdown.discountAmountCents) || '$0.00'}</div>
+            <div class="service">Tip: ${formatCurrencyFromCents(breakdown.tipAmountCents) || '$0.00'}</div>
+            <div class="service">Pre-tip total: ${formatCurrencyFromCents(breakdown.preTipAmountCents) || '$0.00'}</div>
           </div>
           <div class="total">Total: $${total}</div>
         </body>
@@ -368,9 +496,9 @@ export default function AdminReceiptsPage() {
             No receipts found for current filters.
           </div>
         ) : (
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 md:grid-cols-2">
             {filteredTransactions.map((transaction) => {
-              const services = getServicesFromTransaction(transaction);
+              const services = withReconciledServiceTotals(getServicesFromTransaction(transaction), transaction);
               const breakdown = getReceiptBreakdown(transaction, services);
               const total = (breakdown.totalCents / 100).toFixed(2);
               const date = formatReceiptDate(transaction.created);
@@ -406,7 +534,12 @@ export default function AdminReceiptsPage() {
                       {services.length > 0 ? (
                         <div className="space-y-1.5 text-sm text-gray-800">
                           {services.map((service, idx) => (
-                            <div key={idx}>{renderServiceLine(service)}</div>
+                            <div key={idx} className="flex items-start justify-between gap-3">
+                              <span className="text-gray-800">{getServiceLabel(service)}</span>
+                              <span className="whitespace-nowrap rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                                {formatCurrencyFromCents(getServiceAmountCents(service)) || '—'}
+                              </span>
+                            </div>
                           ))}
                         </div>
                       ) : (
@@ -421,41 +554,35 @@ export default function AdminReceiptsPage() {
                       </p>
                     </div>
 
-                    {breakdown.processingFeeCents > 0 && (
-                      <div className="mt-2 flex items-center justify-between">
-                        <p className="text-sm text-gray-600">Processing Fee</p>
-                        <p className="text-sm font-medium text-gray-800">
-                          {formatCurrencyFromCents(breakdown.processingFeeCents)}
-                        </p>
-                      </div>
-                    )}
+                    <div className="mt-2 flex items-center justify-between">
+                      <p className="text-sm text-gray-600">Processing Fee</p>
+                      <p className="text-sm font-medium text-gray-800">
+                        {formatCurrencyFromCents(breakdown.processingFeeCents) || '$0.00'}
+                      </p>
+                    </div>
 
-                    {breakdown.discountAmountCents > 0 && (
-                      <div className="mt-2 flex items-center justify-between text-green-700">
-                        <p className="text-sm">
-                          Coupon{breakdown.couponCode ? ` (${breakdown.couponCode})` : ''}
-                        </p>
-                        <p className="text-sm font-medium">
-                          -{formatCurrencyFromCents(breakdown.discountAmountCents)}
-                        </p>
-                      </div>
-                    )}
+                    <div className="mt-2 flex items-center justify-between text-green-700">
+                      <p className="text-sm">
+                        Coupon{breakdown.couponCode ? ` (${breakdown.couponCode})` : ''}
+                      </p>
+                      <p className="text-sm font-medium">
+                        -{formatCurrencyFromCents(breakdown.discountAmountCents) || '$0.00'}
+                      </p>
+                    </div>
 
-                    {breakdown.discountAmountCents === 0 && breakdown.couponCode && (
-                      <div className="mt-2 flex items-center justify-between text-green-700">
-                        <p className="text-sm">Coupon ({breakdown.couponCode})</p>
-                        <p className="text-sm font-medium">Applied</p>
-                      </div>
-                    )}
+                    <div className="mt-2 flex items-center justify-between text-amber-700">
+                      <p className="text-sm">Tip</p>
+                      <p className="text-sm font-medium">
+                        {formatCurrencyFromCents(breakdown.tipAmountCents) || '$0.00'}
+                      </p>
+                    </div>
 
-                    {breakdown.tipAmountCents > 0 && (
-                      <div className="mt-2 flex items-center justify-between text-amber-700">
-                        <p className="text-sm">Tip</p>
-                        <p className="text-sm font-medium">
-                          {formatCurrencyFromCents(breakdown.tipAmountCents)}
-                        </p>
-                      </div>
-                    )}
+                    <div className="mt-2 flex items-center justify-between">
+                      <p className="text-sm text-gray-600">Pre-tip Total</p>
+                      <p className="text-sm font-medium text-gray-800">
+                        {formatCurrencyFromCents(breakdown.preTipAmountCents) || '$0.00'}
+                      </p>
+                    </div>
 
                     <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
                       <p className="text-sm text-gray-600">Total Charged</p>

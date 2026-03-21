@@ -36,6 +36,9 @@ export default async function handler(req, res) {
           amount_off: amountOff,
           currency: (coupon.currency || 'usd').toUpperCase(),
           label: `${promo.code || coupon.name || promo.id} (${discountLabel})`,
+          applies_to_product_ids: Array.isArray(coupon.applies_to?.products)
+            ? coupon.applies_to.products
+            : [],
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -66,6 +69,9 @@ export default async function handler(req, res) {
           amount_off: amountOff,
           currency: (coupon.currency || 'usd').toUpperCase(),
           label: `${coupon.name || coupon.id} (${discountLabel})`,
+          applies_to_product_ids: Array.isArray(coupon.applies_to?.products)
+            ? coupon.applies_to.products
+            : [],
         };
       });
 
