@@ -75,6 +75,44 @@ export default function StripeTerminal() {
     );
   }, [stripeItems, productSearch]);
 
+  const groupedFilteredStripeItems = useMemo(() => {
+    const preferredOrder = [
+      'Head Spa',
+      'Body Massage',
+      'Body Harmony',
+      'Foot Care',
+      'Manicure Services',
+      'Side-by-Side Services',
+      'Other Services',
+    ];
+    const rank = new Map(preferredOrder.map((name, idx) => [name.toLowerCase(), idx]));
+
+    const groups = filteredStripeItems.reduce((acc, item) => {
+      const category = String(item.category || 'Other Services').trim() || 'Other Services';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(item);
+      return acc;
+    }, {});
+
+    return Object.entries(groups)
+      .sort(([a], [b]) => {
+        const aRank = rank.has(a.toLowerCase()) ? rank.get(a.toLowerCase()) : Number.MAX_SAFE_INTEGER;
+        const bRank = rank.has(b.toLowerCase()) ? rank.get(b.toLowerCase()) : Number.MAX_SAFE_INTEGER;
+        if (aRank !== bRank) return aRank - bRank;
+        return a.localeCompare(b);
+      })
+      .map(([category, items]) => {
+        const sorted = items.sort((x, y) => x.name.localeCompare(y.name) || x.amount - y.amount);
+        const regularItems = sorted.filter((item) => !item.is_add_on);
+        const addOnItems = sorted.filter((item) => item.is_add_on);
+        return {
+          category,
+          regularItems,
+          addOnItems,
+        };
+      });
+  }, [filteredStripeItems]);
+
   const selectedServicesAmount = selectedServices.reduce(
     (sum, item) => sum + (item.amount / 100) * item.quantity,
     0
@@ -344,6 +382,9 @@ export default function StripeTerminal() {
       }
       return [...prev, { ...matched, quantity: 1 }];
     });
+
+    // Reset search after adding so staff can quickly search the next service.
+    setProductSearch('');
   };
 
   const updateServiceQuantity = (id, nextQuantity) => {
@@ -873,10 +914,24 @@ export default function StripeTerminal() {
               <option value="">
                 {filteredStripeItems.length ? 'Select a service to add' : 'No matching services'}
               </option>
-              {filteredStripeItems.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
+              {groupedFilteredStripeItems.map((group) => (
+                <optgroup key={group.category} label={group.category}>
+                  {group.regularItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                  {group.addOnItems.length > 0 && group.regularItems.length > 0 && (
+                    <option disabled value={`divider-${group.category}`}>
+                      ---------- Add-ons ----------
+                    </option>
+                  )}
+                  {group.addOnItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             <button
