@@ -68,6 +68,14 @@ export default function AdminDashboard() {
             <p className="text-gray-600">Update business hours and home page announcements</p>
           </div>
         </Link>
+
+        <Link href="/admin/receipts">
+          <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition cursor-pointer border border-gray-200">
+            <div className="text-3xl mb-3">🧾</div>
+            <h2 className="text-xl font-semibold mb-2">Receipt Printing</h2>
+            <p className="text-gray-600">Browse and print receipts for transactions</p>
+          </div>
+        </Link>
       </div>
 
       <div className="mt-8 p-4 bg-blue-50 rounded-lg">

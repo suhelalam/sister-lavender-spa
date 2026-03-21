@@ -27,7 +27,8 @@ export default async function handler(req, res) {
         .map((service) => `${service.quantity}x ${service.name}`)
         .join(', ')
         .slice(0, 500);
-      metadata.services = summary;
+      metadata.services = JSON.stringify(safeServices);
+      metadata.service_summary = summary;
       metadata.service_count = String(safeServices.length);
     }
     if (coupon_code) {

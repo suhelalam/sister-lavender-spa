@@ -10,3 +10,36 @@ body {
 .page-container {
   @apply w-full max-w-screen-md mx-auto px-4 md:px-6 py-8;
 }
+
+/* Receipt printing styles */
+@media print {
+  .receipt-print {
+    width: 80mm; /* Standard thermal receipt width */
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.2;
+    margin: 0 auto;
+    padding: 10px;
+    background: white;
+    color: black;
+  }
+
+  .receipt-print * {
+    font-family: 'Courier New', monospace !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .receipt-print,
+  .receipt-print * {
+    visibility: visible;
+  }
+
+  .receipt-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+}
