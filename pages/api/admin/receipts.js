@@ -99,6 +99,25 @@ export default async function handler(req, res) {
           customer_phone: customerPhone,
           customer_email: charge ? charge.receipt_email || customerEmail : customerEmail,
           coupon_code: storedPayment?.couponCode || metadata.coupon_code || '',
+          coupon_id: storedPayment?.couponId || metadata.coupon_id || '',
+          promotion_code_id: storedPayment?.promotionCodeId || metadata.promotion_code_id || '',
+          coupon_name: storedPayment?.couponName || metadata.coupon_name || '',
+          coupon_discount_type:
+            storedPayment?.couponDiscountType || metadata.coupon_discount_type || '',
+          coupon_percent_off: (() => {
+            if (storedPayment?.couponPercentOff !== undefined && storedPayment?.couponPercentOff !== null) {
+              const storedPercent = Number(storedPayment.couponPercentOff);
+              return Number.isFinite(storedPercent) && storedPercent > 0 ? storedPercent : null;
+            }
+            const metadataPercent = Number(metadata.coupon_percent_off || 0);
+            return Number.isFinite(metadataPercent) && metadataPercent > 0 ? metadataPercent : null;
+          })(),
+          coupon_amount_off_cents:
+            storedPayment?.couponAmountOffCents ??
+            Math.max(0, Number(metadata.coupon_amount_off_cents || 0)),
+          coupon_currency: storedPayment?.couponCurrency || metadata.coupon_currency || '',
+          coupon_discount_display:
+            storedPayment?.couponDiscountDisplay || metadata.coupon_discount_display || '',
           discount_amount_cents: discountAmountCents,
           processing_fee_amount_cents: processingFeeAmountCents,
           tip_amount_cents: tipAmountCents,

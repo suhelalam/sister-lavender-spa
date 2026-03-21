@@ -172,6 +172,21 @@ const getReceiptBreakdown = (transaction, services) => {
     Number.isFinite(preTipAmountFromApi) && preTipAmountFromApi >= 0
       ? Math.round(preTipAmountFromApi)
       : Math.max(0, totalCents - tipAmountCents);
+  const couponCode = String(transaction?.coupon_code || '').trim();
+  const couponDiscountDisplay = String(transaction?.coupon_discount_display || '').trim();
+  const couponPercentOff = Number(transaction?.coupon_percent_off);
+  const couponAmountOffCents = Number(transaction?.coupon_amount_off_cents);
+  const couponValueLabel =
+    couponDiscountDisplay ||
+    (Number.isFinite(couponPercentOff) && couponPercentOff > 0
+      ? `${couponPercentOff}% off`
+      : Number.isFinite(couponAmountOffCents) && couponAmountOffCents > 0
+        ? `${formatCurrencyFromCents(couponAmountOffCents) || '$0.00'} off`
+        : '');
+  const couponLineLabel =
+    couponCode && couponValueLabel
+      ? `${couponCode} • ${couponValueLabel}`
+      : couponCode || couponValueLabel;
 
   return {
     servicesSubtotalCents,
@@ -180,7 +195,9 @@ const getReceiptBreakdown = (transaction, services) => {
     tipAmountCents,
     preTipAmountCents,
     totalCents,
-    couponCode: String(transaction?.coupon_code || '').trim(),
+    couponCode,
+    couponValueLabel,
+    couponLineLabel,
   };
 };
 
@@ -194,6 +211,9 @@ export default function AdminReceiptsPage() {
   const [servicePriceMap, setServicePriceMap] = useState({});
   const [dayFilter, setDayFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [receiptEmailInputs, setReceiptEmailInputs] = useState({});
+  const [sendingReceiptById, setSendingReceiptById] = useState({});
+  const [emailStatusById, setEmailStatusById] = useState({});
   const router = useRouter();
 
   useEffect(() => {
@@ -363,7 +383,7 @@ export default function AdminReceiptsPage() {
           <div style="margin-top:10px; border-top:1px solid #ddd; padding-top:8px;">
             <div class="service">Services subtotal: ${formatCurrencyFromCents(breakdown.servicesSubtotalCents) || '$0.00'}</div>
             <div class="service">Processing fee: ${formatCurrencyFromCents(breakdown.processingFeeCents) || '$0.00'}</div>
-            <div class="service">Coupon${breakdown.couponCode ? ` (${breakdown.couponCode})` : ''}: -${formatCurrencyFromCents(breakdown.discountAmountCents) || '$0.00'}</div>
+            <div class="service">Coupon${breakdown.couponLineLabel ? ` (${breakdown.couponLineLabel})` : ''}: -${formatCurrencyFromCents(breakdown.discountAmountCents) || '$0.00'}</div>
             <div class="service">Tip: ${formatCurrencyFromCents(breakdown.tipAmountCents) || '$0.00'}</div>
             <div class="service">Pre-tip total: ${formatCurrencyFromCents(breakdown.preTipAmountCents) || '$0.00'}</div>
           </div>
@@ -373,6 +393,71 @@ export default function AdminReceiptsPage() {
     `);
     printWindow.document.close();
     printWindow.print();
+  };
+
+  const getDefaultReceiptEmail = (transaction) =>
+    String(transaction?.customer_email || transaction?.receipt_email || '').trim();
+
+  const getReceiptEmailValue = (transaction) =>
+    receiptEmailInputs[transaction.id] ?? getDefaultReceiptEmail(transaction);
+
+  const handleSendReceiptEmail = async (transaction, services, breakdown, date) => {
+    const recipient = getReceiptEmailValue(transaction).trim();
+    if (!recipient) {
+      setEmailStatusById((prev) => ({
+        ...prev,
+        [transaction.id]: { type: 'error', text: 'Enter an email before sending.' },
+      }));
+      return;
+    }
+
+    setSendingReceiptById((prev) => ({ ...prev, [transaction.id]: true }));
+    setEmailStatusById((prev) => ({
+      ...prev,
+      [transaction.id]: { type: 'info', text: 'Sending receipt email...' },
+    }));
+
+    try {
+      const payloadServices = Array.isArray(services)
+        ? services.map((service) => ({
+            label: getServiceLabel(service),
+            amountCents: getServiceAmountCents(service) || 0,
+          }))
+        : [];
+
+      const response = await fetch('/api/admin/send-receipt-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toEmail: recipient,
+          transaction: {
+            id: transaction.id,
+            date,
+            customerName: transaction.customer_name || '',
+            customerEmail: transaction.customer_email || transaction.receipt_email || '',
+          },
+          services: payloadServices,
+          breakdown,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || 'Failed to send receipt email.');
+      }
+
+      setEmailStatusById((prev) => ({
+        ...prev,
+        [transaction.id]: { type: 'success', text: `Receipt sent to ${recipient}.` },
+      }));
+    } catch (error) {
+      setEmailStatusById((prev) => ({
+        ...prev,
+        [transaction.id]: { type: 'error', text: error.message || 'Failed to send receipt email.' },
+      }));
+    } finally {
+      setSendingReceiptById((prev) => ({ ...prev, [transaction.id]: false }));
+    }
   };
 
   const filteredTransactions = useMemo(() => {
@@ -502,6 +587,9 @@ export default function AdminReceiptsPage() {
               const breakdown = getReceiptBreakdown(transaction, services);
               const total = (breakdown.totalCents / 100).toFixed(2);
               const date = formatReceiptDate(transaction.created);
+              const emailValue = getReceiptEmailValue(transaction);
+              const isSendingReceipt = !!sendingReceiptById[transaction.id];
+              const emailStatus = emailStatusById[transaction.id];
               return (
                 <div
                   key={transaction.id}
@@ -563,7 +651,7 @@ export default function AdminReceiptsPage() {
 
                     <div className="mt-2 flex items-center justify-between text-green-700">
                       <p className="text-sm">
-                        Coupon{breakdown.couponCode ? ` (${breakdown.couponCode})` : ''}
+                        Coupon{breakdown.couponLineLabel ? ` (${breakdown.couponLineLabel})` : ''}
                       </p>
                       <p className="text-sm font-medium">
                         -{formatCurrencyFromCents(breakdown.discountAmountCents) || '$0.00'}
@@ -596,6 +684,54 @@ export default function AdminReceiptsPage() {
                   >
                     Print Receipt
                   </button>
+
+                  <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
+                    <label
+                      htmlFor={`receipt-email-${transaction.id}`}
+                      className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500"
+                    >
+                      Email Receipt
+                    </label>
+                    <input
+                      id={`receipt-email-${transaction.id}`}
+                      type="email"
+                      value={emailValue}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+                        setReceiptEmailInputs((prev) => ({
+                          ...prev,
+                          [transaction.id]: nextValue,
+                        }));
+                        setEmailStatusById((prev) => ({
+                          ...prev,
+                          [transaction.id]: null,
+                        }));
+                      }}
+                      placeholder="customer@example.com"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                    />
+                    <button
+                      type="button"
+                      disabled={isSendingReceipt}
+                      onClick={() => handleSendReceiptEmail(transaction, services, breakdown, date)}
+                      className="mt-2 w-full rounded-lg bg-gray-900 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSendingReceipt ? 'Sending...' : 'Send Receipt Email'}
+                    </button>
+                    {emailStatus?.text && (
+                      <p
+                        className={`mt-2 text-xs ${
+                          emailStatus.type === 'success'
+                            ? 'text-emerald-700'
+                            : emailStatus.type === 'error'
+                              ? 'text-red-600'
+                              : 'text-gray-600'
+                        }`}
+                      >
+                        {emailStatus.text}
+                      </p>
+                    )}
+                  </div>
                 </div>
               );
             })}

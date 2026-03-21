@@ -39,6 +39,25 @@ export default function StripeTerminal() {
 
   const [includeFee, setIncludeFee] = useState(true);
   const selectedCoupon = coupons.find((coupon) => coupon.id === selectedCouponId) || null;
+  const selectedCouponPayload = selectedCoupon
+    ? {
+        code: selectedCoupon.code || '',
+        coupon_id: selectedCoupon.coupon_id || '',
+        promotion_code_id: selectedCoupon.promotion_code_id || '',
+        name: selectedCoupon.name || '',
+        discount_type: selectedCoupon.discount_type || '',
+        percent_off:
+          selectedCoupon.percent_off !== null && Number.isFinite(Number(selectedCoupon.percent_off))
+          ? Number(selectedCoupon.percent_off)
+          : null,
+        amount_off:
+          selectedCoupon.amount_off !== null && Number.isFinite(Number(selectedCoupon.amount_off))
+          ? Number(selectedCoupon.amount_off)
+          : null,
+        currency: selectedCoupon.currency || '',
+        discount_display: selectedCoupon.discount_display || '',
+      }
+    : null;
 
   const normalizePhoneForStripe = (rawPhone) => {
     if (!rawPhone) return null;
@@ -463,7 +482,6 @@ export default function StripeTerminal() {
 
     setIsLoading(true);
     try {
-      const selectedCoupon = coupons.find((coupon) => coupon.id === selectedCouponId) || null;
       const baseServiceLines =
         selectedServices.length > 0
           ? selectedServices.map((service) => ({
@@ -501,7 +519,7 @@ export default function StripeTerminal() {
         body: JSON.stringify({
           amount: finalChargeAmount,
           services: servicesForReceipt,
-          couponCode: selectedCoupon?.code || '',
+          couponCode: selectedCouponPayload?.code || '',
           discountAmount: discountAmount,
           stripeCustomerId: selectedCustomer?.id || null,
           customerEmail: selectedCustomer?.email || null,
@@ -553,7 +571,6 @@ export default function StripeTerminal() {
 
     setIsLoading(true);
     try {
-      const selectedCoupon = coupons.find((coupon) => coupon.id === selectedCouponId) || null;
       const baseServiceLines =
         selectedServices.length > 0
           ? selectedServices.map((service) => ({
@@ -627,7 +644,15 @@ export default function StripeTerminal() {
           amount: finalChargeAmount,
           currency: 'usd',
           services: servicesForCharge,
-          coupon_code: selectedCoupon?.code || '',
+          coupon_code: selectedCouponPayload?.code || '',
+          coupon_id: selectedCouponPayload?.coupon_id || '',
+          promotion_code_id: selectedCouponPayload?.promotion_code_id || '',
+          coupon_name: selectedCouponPayload?.name || '',
+          coupon_discount_type: selectedCouponPayload?.discount_type || '',
+          coupon_percent_off: selectedCouponPayload?.percent_off,
+          coupon_amount_off_cents: selectedCouponPayload?.amount_off,
+          coupon_currency: selectedCouponPayload?.currency || '',
+          coupon_discount_display: selectedCouponPayload?.discount_display || '',
           discount_amount_cents: Math.max(0, Math.round(discountAmount * 100)),
           processing_fee_amount_cents: Math.max(0, Math.round(feeAmountCents || 0)),
         }),

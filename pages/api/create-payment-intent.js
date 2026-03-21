@@ -16,6 +16,14 @@ export default async function handler(req, res) {
       currency = 'usd',
       services = [],
       coupon_code = '',
+      coupon_id = '',
+      promotion_code_id = '',
+      coupon_name = '',
+      coupon_discount_type = '',
+      coupon_percent_off = null,
+      coupon_amount_off_cents = null,
+      coupon_currency = '',
+      coupon_discount_display = '',
       discount_amount_cents = 0,
       processing_fee_amount_cents = 0,
     } = req.body || {};
@@ -42,6 +50,32 @@ export default async function handler(req, res) {
     }
     if (coupon_code) {
       metadata.coupon_code = String(coupon_code).slice(0, 100);
+    }
+    if (coupon_id) {
+      metadata.coupon_id = String(coupon_id).slice(0, 100);
+    }
+    if (promotion_code_id) {
+      metadata.promotion_code_id = String(promotion_code_id).slice(0, 100);
+    }
+    if (coupon_name) {
+      metadata.coupon_name = String(coupon_name).slice(0, 100);
+    }
+    if (coupon_discount_type) {
+      metadata.coupon_discount_type = String(coupon_discount_type).slice(0, 20);
+    }
+    if (coupon_discount_display) {
+      metadata.coupon_discount_display = String(coupon_discount_display).slice(0, 100);
+    }
+    const safeCouponPercentOff = Number(coupon_percent_off);
+    if (Number.isFinite(safeCouponPercentOff) && safeCouponPercentOff > 0) {
+      metadata.coupon_percent_off = String(safeCouponPercentOff);
+    }
+    const safeCouponAmountOffCents = Math.max(0, Math.round(Number(coupon_amount_off_cents || 0)));
+    if (safeCouponAmountOffCents > 0) {
+      metadata.coupon_amount_off_cents = String(safeCouponAmountOffCents);
+    }
+    if (coupon_currency) {
+      metadata.coupon_currency = String(coupon_currency).slice(0, 10).toUpperCase();
     }
     const safeDiscountAmountCents = Math.max(0, Math.round(Number(discount_amount_cents || 0)));
     if (safeDiscountAmountCents > 0) {
@@ -70,6 +104,17 @@ export default async function handler(req, res) {
         currency: String(currency || 'usd').toLowerCase(),
         services: safeServices,
         couponCode: coupon_code ? String(coupon_code).slice(0, 100) : '',
+        couponId: coupon_id ? String(coupon_id).slice(0, 100) : '',
+        promotionCodeId: promotion_code_id ? String(promotion_code_id).slice(0, 100) : '',
+        couponName: coupon_name ? String(coupon_name).slice(0, 100) : '',
+        couponDiscountType: coupon_discount_type ? String(coupon_discount_type).slice(0, 20) : '',
+        couponPercentOff:
+          Number.isFinite(safeCouponPercentOff) && safeCouponPercentOff > 0 ? safeCouponPercentOff : null,
+        couponAmountOffCents: safeCouponAmountOffCents > 0 ? safeCouponAmountOffCents : 0,
+        couponCurrency: coupon_currency ? String(coupon_currency).slice(0, 10).toUpperCase() : '',
+        couponDiscountDisplay: coupon_discount_display
+          ? String(coupon_discount_display).slice(0, 100)
+          : '',
         discountAmountCents: safeDiscountAmountCents,
         processingFeeAmountCents: safeProcessingFeeAmountCents,
         createdAt: serverTimestamp(),
