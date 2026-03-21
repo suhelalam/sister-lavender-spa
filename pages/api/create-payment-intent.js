@@ -9,7 +9,13 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { amount, currency = 'usd', services = [], coupon_code = '' } = req.body || {};
+    const {
+      amount,
+      currency = 'usd',
+      services = [],
+      coupon_code = '',
+      discount_amount_cents = 0,
+    } = req.body || {};
 
     const safeServices = Array.isArray(services)
       ? services
@@ -33,6 +39,10 @@ export default async function handler(req, res) {
     }
     if (coupon_code) {
       metadata.coupon_code = String(coupon_code).slice(0, 100);
+    }
+    const safeDiscountAmountCents = Math.max(0, Math.round(Number(discount_amount_cents || 0)));
+    if (safeDiscountAmountCents > 0) {
+      metadata.discount_amount_cents = String(safeDiscountAmountCents);
     }
 
     const paymentIntent = await stripe.paymentIntents.create({

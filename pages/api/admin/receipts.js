@@ -31,13 +31,24 @@ export default async function handler(req, res) {
         const chargeDetails = charge?.billing_details || {};
         const customerName = chargeDetails?.name || customer?.name || null;
         const customerPhone = chargeDetails?.phone || customer?.phone || null;
+        const metadata = pi.metadata || {};
+        const tipAmountCents = Math.max(0, Number(charge?.amount_details?.tip?.amount || 0));
+        const discountAmountCents = (() => {
+          const centsValue = Number(metadata.discount_amount_cents);
+          if (Number.isFinite(centsValue) && centsValue >= 0) return Math.round(centsValue);
+
+          // Backward compatibility if discount was stored in dollars.
+          const dollarsValue = Number(metadata.discount_amount);
+          if (Number.isFinite(dollarsValue) && dollarsValue >= 0) return Math.round(dollarsValue * 100);
+          return 0;
+        })();
 
         return {
           id: pi.id,
           amount: pi.amount,
           currency: pi.currency,
           created: pi.created,
-          metadata: pi.metadata,
+          metadata,
           customer: pi.customer,
           description: pi.description,
           receipt_email: charge ? charge.receipt_email : customerEmail,
@@ -45,6 +56,9 @@ export default async function handler(req, res) {
           customer_name: customerName,
           customer_phone: customerPhone,
           customer_email: charge ? charge.receipt_email || customerEmail : customerEmail,
+          coupon_code: metadata.coupon_code || '',
+          discount_amount_cents: discountAmountCents,
+          tip_amount_cents: tipAmountCents,
         };
       })
     );

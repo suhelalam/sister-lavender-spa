@@ -101,6 +101,39 @@ const renderServiceLine = (service) => {
     : `${service.name}${qty}`;
 };
 
+const isProcessingFeeService = (name) =>
+  String(name || '').trim().toLowerCase() === 'processing fee (3%)';
+
+const getServiceLineTotalCents = (service) => {
+  const unitAmountCents = Number(service?.unitAmountCents);
+  const quantity = Math.max(1, Number(service?.quantity || 1));
+  if (!Number.isFinite(unitAmountCents) || unitAmountCents < 0) return 0;
+  return Math.round(unitAmountCents * quantity);
+};
+
+const getReceiptBreakdown = (transaction, services) => {
+  const servicesSubtotalCents = services
+    .filter((service) => !isProcessingFeeService(service.name))
+    .reduce((sum, service) => sum + getServiceLineTotalCents(service), 0);
+
+  const processingFeeCents = services
+    .filter((service) => isProcessingFeeService(service.name))
+    .reduce((sum, service) => sum + getServiceLineTotalCents(service), 0);
+
+  const discountAmountCents = Math.max(0, Number(transaction?.discount_amount_cents || 0));
+  const tipAmountCents = Math.max(0, Number(transaction?.tip_amount_cents || 0));
+  const totalCents = Math.max(0, Number(transaction?.amount || 0));
+
+  return {
+    servicesSubtotalCents,
+    processingFeeCents,
+    discountAmountCents,
+    tipAmountCents,
+    totalCents,
+    couponCode: String(transaction?.coupon_code || '').trim(),
+  };
+};
+
 export default function AdminReceiptsPage() {
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -147,7 +180,8 @@ export default function AdminReceiptsPage() {
 
   const printReceipt = (transaction) => {
     const services = getServicesFromTransaction(transaction);
-    const total = (transaction.amount / 100).toFixed(2);
+    const breakdown = getReceiptBreakdown(transaction, services);
+    const total = (breakdown.totalCents / 100).toFixed(2);
     const date = formatReceiptDate(transaction.created);
     const printWindow = window.open('', '_blank', 'width=400,height=700');
     if (!printWindow) return;
@@ -180,6 +214,29 @@ export default function AdminReceiptsPage() {
               services.length > 0
                 ? services.map((service) => `<div class="service">${renderServiceLine(service)}</div>`).join('')
                 : '<div class="service">No service details saved</div>'
+            }
+          </div>
+          <div style="margin-top:10px; border-top:1px solid #ddd; padding-top:8px;">
+            <div class="service">Services subtotal: ${formatCurrencyFromCents(breakdown.servicesSubtotalCents) || '$0.00'}</div>
+            ${
+              breakdown.processingFeeCents > 0
+                ? `<div class="service">Processing fee: ${formatCurrencyFromCents(breakdown.processingFeeCents)}</div>`
+                : ''
+            }
+            ${
+              breakdown.discountAmountCents > 0
+                ? `<div class="service">Coupon${breakdown.couponCode ? ` (${breakdown.couponCode})` : ''}: -${(breakdown.discountAmountCents / 100).toFixed(2)}</div>`
+                : ''
+            }
+            ${
+              breakdown.discountAmountCents === 0 && breakdown.couponCode
+                ? `<div class="service">Coupon (${breakdown.couponCode}): applied</div>`
+                : ''
+            }
+            ${
+              breakdown.tipAmountCents > 0
+                ? `<div class="service">Tip: ${formatCurrencyFromCents(breakdown.tipAmountCents)}</div>`
+                : ''
             }
           </div>
           <div class="total">Total: $${total}</div>
@@ -314,7 +371,8 @@ export default function AdminReceiptsPage() {
           <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {filteredTransactions.map((transaction) => {
               const services = getServicesFromTransaction(transaction);
-              const total = (transaction.amount / 100).toFixed(2);
+              const breakdown = getReceiptBreakdown(transaction, services);
+              const total = (breakdown.totalCents / 100).toFixed(2);
               const date = formatReceiptDate(transaction.created);
               return (
                 <div
@@ -357,7 +415,50 @@ export default function AdminReceiptsPage() {
                     </div>
 
                     <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
-                      <p className="text-sm text-gray-600">Total</p>
+                      <p className="text-sm text-gray-600">Services Subtotal</p>
+                      <p className="text-sm font-medium text-gray-800">
+                        {formatCurrencyFromCents(breakdown.servicesSubtotalCents) || '$0.00'}
+                      </p>
+                    </div>
+
+                    {breakdown.processingFeeCents > 0 && (
+                      <div className="mt-2 flex items-center justify-between">
+                        <p className="text-sm text-gray-600">Processing Fee</p>
+                        <p className="text-sm font-medium text-gray-800">
+                          {formatCurrencyFromCents(breakdown.processingFeeCents)}
+                        </p>
+                      </div>
+                    )}
+
+                    {breakdown.discountAmountCents > 0 && (
+                      <div className="mt-2 flex items-center justify-between text-green-700">
+                        <p className="text-sm">
+                          Coupon{breakdown.couponCode ? ` (${breakdown.couponCode})` : ''}
+                        </p>
+                        <p className="text-sm font-medium">
+                          -{formatCurrencyFromCents(breakdown.discountAmountCents)}
+                        </p>
+                      </div>
+                    )}
+
+                    {breakdown.discountAmountCents === 0 && breakdown.couponCode && (
+                      <div className="mt-2 flex items-center justify-between text-green-700">
+                        <p className="text-sm">Coupon ({breakdown.couponCode})</p>
+                        <p className="text-sm font-medium">Applied</p>
+                      </div>
+                    )}
+
+                    {breakdown.tipAmountCents > 0 && (
+                      <div className="mt-2 flex items-center justify-between text-amber-700">
+                        <p className="text-sm">Tip</p>
+                        <p className="text-sm font-medium">
+                          {formatCurrencyFromCents(breakdown.tipAmountCents)}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
+                      <p className="text-sm text-gray-600">Total Charged</p>
                       <p className="text-lg font-semibold text-gray-900">${total}</p>
                     </div>
                   </div>

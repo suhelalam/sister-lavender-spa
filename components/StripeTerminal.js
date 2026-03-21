@@ -565,6 +565,7 @@ export default function StripeTerminal() {
           currency: 'usd',
           services: servicesForCharge,
           coupon_code: selectedCoupon?.code || '',
+          discount_amount_cents: Math.max(0, Math.round(discountAmount * 100)),
         }),
       });
 
