@@ -43,38 +43,91 @@ export default async function handler(req, res) {
       })
     : 'Not provided';
 
-  // ✅ Build services list safely
-  const serviceList = Array.isArray(services)
-    ? services
-        .map((s) => s.serviceName || s.serviceVariationId || 'Unknown Service')
-        .join(', ')
-    : 'None';
-
   const parseDurationMinutes = (value) => {
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed <= 0) return 0;
     return Math.round(parsed);
   };
 
-  function formatServicesList() {
-    if (!Array.isArray(services) || services.length === 0) {
-      return 'None';
-    }
+  const normalizeCategory = (value = '') =>
+    String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    return services
-      .map((service) => {
-        const serviceName =
-          service.serviceName || service.serviceVariationId || 'Unknown Service';
-        const duration = parseDurationMinutes(service.durationMinutes);
-        const quantity = service.quantity || 1;
-        return duration > 0
-          ? `• ${serviceName} (${duration} min) x${quantity}`
-          : `• ${serviceName} x${quantity}`;
-      })
-      .join('\n');
-  }
+  const normalizedServices = Array.isArray(services)
+    ? services.map((service) => ({
+        ...service,
+        serviceName: service.serviceName || service.serviceVariationId || 'Unknown Service',
+        quantity: Math.max(1, Number(service.quantity || 1)),
+        durationMinutes: parseDurationMinutes(service.durationMinutes),
+        isAddOn: Boolean(service.isAddOn),
+        category: service.category || '',
+        appliesToCategory: service.appliesToCategory || '',
+      }))
+    : [];
 
-  const formattedServices = formatServicesList();
+  const servicesOnly = normalizedServices.filter((service) => !service.isAddOn);
+  const addOnsOnly = normalizedServices.filter((service) => service.isAddOn);
+  const matchedAddOnIndexes = new Set();
+
+  const serviceGroups = servicesOnly.map((service) => {
+    const serviceCategoryKey = normalizeCategory(service.category);
+    const addOns = [];
+
+    addOnsOnly.forEach((addOn, addOnIndex) => {
+      if (matchedAddOnIndexes.has(addOnIndex)) return;
+      const addOnCategoryKey = normalizeCategory(addOn.appliesToCategory || addOn.category);
+      if (!serviceCategoryKey || !addOnCategoryKey) return;
+      if (serviceCategoryKey !== addOnCategoryKey) return;
+      addOns.push(addOn);
+      matchedAddOnIndexes.add(addOnIndex);
+    });
+
+    return { service, addOns };
+  });
+
+  const unassignedAddOns = addOnsOnly.filter((_, index) => !matchedAddOnIndexes.has(index));
+
+  const formatServiceLine = (service, prefix = '• ') => {
+    const durationText = service.durationMinutes > 0 ? ` (${service.durationMinutes} min)` : '';
+    return `${prefix}${service.serviceName}${durationText} x${service.quantity}`;
+  };
+
+  const formattedServices = normalizedServices.length > 0
+    ? [
+        ...serviceGroups.flatMap(({ service, addOns }) => [
+          formatServiceLine(service, '• '),
+          ...addOns.map((addOn) => formatServiceLine(addOn, '  + ')),
+        ]),
+        ...unassignedAddOns.map((addOn) => formatServiceLine(addOn, '• + ')),
+      ].join('\n')
+    : 'None';
+
+  const formattedServicesHtml = normalizedServices.length > 0
+    ? `
+      <ul style="margin:8px 0 0 18px; padding:0;">
+        ${serviceGroups
+          .map(({ service, addOns }) => `
+            <li style="margin:0 0 8px 0;">
+              <strong>${service.serviceName}</strong>${service.durationMinutes > 0 ? ` (${service.durationMinutes} min)` : ''} x${service.quantity}
+              ${addOns.length > 0
+                ? `<ul style="margin:6px 0 0 16px; padding:0;">
+                    ${addOns
+                      .map((addOn) => `<li style="margin:0 0 4px 0;">+ ${addOn.serviceName}${addOn.durationMinutes > 0 ? ` (${addOn.durationMinutes} min)` : ''} x${addOn.quantity}</li>`)
+                      .join('')}
+                  </ul>`
+                : ''}
+            </li>
+          `)
+          .join('')}
+        ${unassignedAddOns
+          .map((addOn) => `<li style="margin:0 0 6px 0;">+ ${addOn.serviceName}${addOn.durationMinutes > 0 ? ` (${addOn.durationMinutes} min)` : ''} x${addOn.quantity}</li>`)
+          .join('')}
+      </ul>
+    `
+    : '<p>None</p>';
+
+  const serviceList = normalizedServices.length > 0
+    ? normalizedServices.map((s) => s.serviceName).join(', ')
+    : 'None';
 
   // ✅ Configure transporter
   const transporter = nodemailer.createTransport({
@@ -233,7 +286,8 @@ Note: ${note || 'None'}
     
     <h3>Appointment Details:</h3>
     <p><strong>Date & Time:</strong> ${appointmentDate}</p>
-    <p><strong>Services:</strong> ${serviceList}</p>
+    <p><strong>Services:</strong></p>
+    ${formattedServicesHtml}
     <p><strong>Party Size:</strong> ${partySize || 1}</p>
     ${totalFormatted ? `<p><strong>Total:</strong> ${totalFormatted}</p>` : ''}
     
@@ -262,7 +316,8 @@ Your appointment has been confirmed. We look forward to seeing you!
 Appointment Details:
 ----------------------------
 Date & Time: ${appointmentDate}
-Services: ${serviceList}
+Services:
+${formattedServices}
 Party Size: ${partySize || 1}
 ${totalFormatted ? `Total: ${totalFormatted}` : ''}
 Note: ${note || 'None provided'}
@@ -306,14 +361,17 @@ Address: 2706 W Chicago Ave, Chicago, IL 60622
   }
 
   async function logBookingAnalytics() {
-    const serviceLines = Array.isArray(services)
-      ? services.map((service) => ({
+    const serviceLines = normalizedServices
+      .map((service) => ({
           serviceName: service.serviceName || service.serviceVariationId || 'Unknown Service',
           serviceVariationId: service.serviceVariationId || '',
           quantity: Math.max(1, Number(service.quantity || 1)),
           durationMinutes: Math.max(0, Number(service.durationMinutes || 0)),
+          isAddOn: Boolean(service.isAddOn),
+          category: service.category || '',
+          appliesToCategory: service.appliesToCategory || '',
         }))
-      : [];
+      ;
 
     const totalServiceUnits = serviceLines.reduce(
       (sum, service) => sum + (service.quantity || 0),

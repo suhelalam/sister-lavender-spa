@@ -40,6 +40,34 @@ export default function ConfirmBookingPage() {
     return parsed >= 1000 ? Math.round(parsed / 60000) : Math.round(parsed);
   };
 
+  const normalizeCategory = (value = '') =>
+    String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const servicesOnly = items.filter((item) => !item?.isAddOn);
+  const addOnsOnly = items.filter((item) => item?.isAddOn);
+  const matchedAddOnIndexes = new Set();
+
+  const serviceGroups = servicesOnly.map((serviceItem) => {
+    const serviceCategoryKey = normalizeCategory(serviceItem.category);
+    const matchedAddOns = [];
+
+    addOnsOnly.forEach((addOnItem, addOnIndex) => {
+      if (matchedAddOnIndexes.has(addOnIndex)) return;
+      const addOnCategoryKey = normalizeCategory(
+        addOnItem.appliesToCategory || addOnItem.category
+      );
+      if (!serviceCategoryKey || !addOnCategoryKey) return;
+      if (serviceCategoryKey !== addOnCategoryKey) return;
+
+      matchedAddOns.push(addOnItem);
+      matchedAddOnIndexes.add(addOnIndex);
+    });
+
+    return { serviceItem, matchedAddOns };
+  });
+
+  const unassignedAddOns = addOnsOnly.filter((_, index) => !matchedAddOnIndexes.has(index));
+
   function formatPhoneToE164(phone) {
     // Remove everything except digits
     const digits = phone.replace(/\D/g, '');
@@ -89,7 +117,10 @@ export default function ConfirmBookingPage() {
               serviceName: item.name,
               serviceVariationVersion: item.version,
               durationMinutes: getDurationMinutes(item.duration),
-              quantity: partySize,
+              quantity: Math.max(1, Number(item.quantity || 1)),
+              isAddOn: Boolean(item.isAddOn),
+              category: item.category || '',
+              appliesToCategory: item.appliesToCategory || '',
             })),
             startAt: selectedSlot.startAt,
             locationId,
@@ -259,12 +290,61 @@ export default function ConfirmBookingPage() {
           )}
 
           <div className="space-y-2">
-            {items.map((item, idx) => (
-              <div key={idx} className="flex justify-between text-sm">
-                <span>{item.name}</span>
-                <span>${(item.price / 100).toFixed(2)}</span>
+            {serviceGroups.map(({ serviceItem, matchedAddOns }, idx) => (
+              <div key={`${serviceItem.id}-${idx}`} className="rounded border border-gray-100 p-2">
+                <div className="flex justify-between text-sm font-medium text-gray-900">
+                  <span>
+                    {serviceItem.name}
+                    {serviceItem.quantity > 1 ? ` x${serviceItem.quantity}` : ''}
+                  </span>
+                  <span>${((serviceItem.price * serviceItem.quantity) / 100).toFixed(2)}</span>
+                </div>
+
+                {matchedAddOns.length > 0 ? (
+                  <div className="mt-2 space-y-1">
+                    {matchedAddOns.map((addOn, addOnIdx) => (
+                      <div
+                        key={`${addOn.id}-${addOnIdx}`}
+                        className="flex justify-between text-xs text-gray-600 pl-3"
+                      >
+                        <span>
+                          + {addOn.name}
+                          {addOn.quantity > 1 ? ` x${addOn.quantity}` : ''}
+                        </span>
+                        <span>${((addOn.price * addOn.quantity) / 100).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
+
+            {servicesOnly.length === 0 && addOnsOnly.length > 0 ? (
+              <div className="text-sm text-gray-700">
+                {addOnsOnly.map((item, idx) => (
+                  <div key={`${item.id}-${idx}`} className="flex justify-between text-sm">
+                    <span>{item.name}</span>
+                    <span>${((item.price * item.quantity) / 100).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {unassignedAddOns.length > 0 ? (
+              <div className="rounded border border-amber-100 bg-amber-50 p-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                  Unassigned add-ons
+                </div>
+                <div className="mt-1 space-y-1">
+                  {unassignedAddOns.map((item, idx) => (
+                    <div key={`${item.id}-unassigned-${idx}`} className="flex justify-between text-xs text-amber-900">
+                      <span>+ {item.name}</span>
+                      <span>${((item.price * item.quantity) / 100).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="border-t mt-4 pt-4 space-y-1 text-sm">

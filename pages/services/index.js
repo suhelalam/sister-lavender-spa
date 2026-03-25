@@ -121,6 +121,8 @@ export default function Services() {
       duration: Number(variation.duration || 0),
       version: variation.version || 1,
       isAddOn: true,
+      category: addOn.category || '',
+      appliesToCategory: addOn.appliesToCategory || addOn.category || '',
     });
   };
 

@@ -58,6 +58,8 @@ export default function ServiceCard({ service, image = '', variant = 'default' }
       quantity: 1,
       duration: selectedVariation.duration,
       version: selectedVariation.version || 1,
+      category: service.category || '',
+      isAddOn: false,
     });
   };
 

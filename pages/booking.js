@@ -35,6 +35,8 @@ export default function BookingPage() {
         quantity: 1,
         duration: variation.duration,
         version: variation.version || 1,
+        category: service.category || '',
+        isAddOn: false,
       });
     } else {
       // Create a variation from basic fields
@@ -57,6 +59,8 @@ export default function BookingPage() {
         quantity: 1,
         duration: variation.duration,
         version: variation.version,
+        category: service.category || '',
+        isAddOn: false,
       });
     }
   };
