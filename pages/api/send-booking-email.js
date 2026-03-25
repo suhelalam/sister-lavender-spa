@@ -50,6 +50,12 @@ export default async function handler(req, res) {
         .join(', ')
     : 'None';
 
+  const parseDurationMinutes = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+    return Math.round(parsed);
+  };
+
   function formatServicesList() {
     if (!Array.isArray(services) || services.length === 0) {
       return 'None';
@@ -59,9 +65,11 @@ export default async function handler(req, res) {
       .map((service) => {
         const serviceName =
           service.serviceName || service.serviceVariationId || 'Unknown Service';
-        const duration = service.durationMinutes || 60;
+        const duration = parseDurationMinutes(service.durationMinutes);
         const quantity = service.quantity || 1;
-        return `• ${serviceName} (${duration} min) x${quantity}`;
+        return duration > 0
+          ? `• ${serviceName} (${duration} min) x${quantity}`
+          : `• ${serviceName} x${quantity}`;
       })
       .join('\n');
   }
@@ -99,10 +107,12 @@ export default async function handler(req, res) {
 
         // Sum up all service durations (convert minutes to milliseconds)
         const totalMinutes = services.reduce((total, service) => {
-          // Use durationMinutes from your service data
-          const duration = service.durationMinutes || 60; // Default to 60 minutes
-          return total + duration;
+          return total + parseDurationMinutes(service.durationMinutes);
         }, 0);
+
+        if (totalMinutes <= 0) {
+          return 60 * 60 * 1000;
+        }
 
         return totalMinutes * 60 * 1000; // Convert minutes to milliseconds
       }

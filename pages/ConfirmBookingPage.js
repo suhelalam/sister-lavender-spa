@@ -34,6 +34,12 @@ export default function ConfirmBookingPage() {
 
   if (!isClient) return <div className="p-6">Loading...</div>;
 
+  const getDurationMinutes = (rawDuration) => {
+    const parsed = Number(rawDuration);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+    return parsed >= 1000 ? Math.round(parsed / 60000) : Math.round(parsed);
+  };
+
   function formatPhoneToE164(phone) {
     // Remove everything except digits
     const digits = phone.replace(/\D/g, '');
@@ -82,7 +88,7 @@ export default function ConfirmBookingPage() {
               serviceVariationId: item.id,
               serviceName: item.name,
               serviceVariationVersion: item.version,
-              durationMinutes: Math.round(item.duration / 60000) || 30, // optional
+              durationMinutes: getDurationMinutes(item.duration),
               quantity: partySize,
             })),
             startAt: selectedSlot.startAt,
