@@ -1,8 +1,138 @@
 import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 import Stripe from 'stripe';
-import { db } from '../../lib/firebase';
-import { addDoc, collection } from 'firebase/firestore';
+import crypto from 'crypto';
+import { adminDb, isAdminConfigured } from '../../lib/firebaseAdmin';
+
+function hashCancelToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function getBaseUrl(req) {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+
+  const host = req.headers.host;
+  const forwardedProto = req.headers['x-forwarded-proto'];
+
+  if (forwardedProto && host) return `${forwardedProto}://${host}`;
+  if (host) {
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    return `${protocol}://${host}`;
+  }
+
+  return 'http://localhost:3000';
+}
+
+function buildConfirmationMail({
+  email,
+  firstName,
+  appointmentDate,
+  formattedServicesHtml,
+  formattedServices,
+  partySize,
+  totalFormatted,
+  note,
+  cancelUrl,
+}) {
+  const cancelHtml = cancelUrl
+    ? `
+    <p>If you need to cancel, use the secure link below:</p>
+    <div class="cta-wrap">
+      <a class="cta-link" href="${cancelUrl}" target="_blank" rel="noopener noreferrer">Cancel appointment</a>
+    </div>
+    <p style="font-size: 13px; color: #555;">If the button does not work, copy this URL into your browser:<br>${cancelUrl}</p>
+  `
+    : `
+    <p>If you need to cancel, please call us at (312) 900-3131.</p>
+  `;
+
+  const cancelText = cancelUrl
+    ? `To cancel your booking, use this secure link:\n${cancelUrl}`
+    : 'To cancel your booking, please call us at (312) 900-3131.';
+
+  return {
+    from: `"Sister Lavender Spa" <${process.env.SMTP_USER}>`,
+    to: email,
+    subject: `Booking Confirmation - ${appointmentDate}`,
+    html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .header { background: #f8f9fa; padding: 20px; text-align: center; }
+    .content { padding: 20px; }
+    .footer { background: #f8f9fa; padding: 15px; text-align: center; font-size: 14px; }
+    .cta-wrap { margin: 20px 0; }
+    .cta-link {
+      display: inline-block;
+      background: #7c3aed;
+      color: #fff !important;
+      text-decoration: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>Booking Confirmed! 🎉</h2>
+  </div>
+  <div class="content">
+    <p>Hi ${firstName},</p>
+    <p>Your appointment has been confirmed. We look forward to seeing you!</p>
+
+    <h3>Appointment Details:</h3>
+    <p><strong>Date & Time:</strong> ${appointmentDate}</p>
+    <p><strong>Services:</strong></p>
+    ${formattedServicesHtml}
+    <p><strong>Party Size:</strong> ${partySize || 1}</p>
+    ${totalFormatted ? `<p><strong>Total:</strong> ${totalFormatted}</p>` : ''}
+
+    <p><strong>Note:</strong> ${note || 'None provided'}</p>
+
+    <p>Please arrive 10-15 minutes before your scheduled time.</p>
+
+    ${cancelHtml}
+  </div>
+  <div class="footer">
+    <p>Thank you for choosing us!<br>
+    Sister Lavender Spa<br>
+    Phone: (312) 900-3131<br>
+    Address: 2706 W Chicago Ave, Chicago, IL 60622</p>
+  </div>
+</body>
+</html>
+    `,
+    text: `
+Booking Confirmed!
+
+Hi ${firstName},
+
+Your appointment has been confirmed. We look forward to seeing you!
+
+Appointment Details:
+----------------------------
+Date & Time: ${appointmentDate}
+Services:
+${formattedServices}
+Party Size: ${partySize || 1}
+${totalFormatted ? `Total: ${totalFormatted}` : ''}
+Note: ${note || 'None provided'}
+
+Please arrive 10-15 minutes before your scheduled time.
+
+${cancelText}
+
+Thank you for choosing us!
+Sister Lavender Spa
+Phone: (312) 900-3131
+Address: 2706 W Chicago Ave, Chicago, IL 60622
+    `,
+  };
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -26,12 +156,10 @@ export default async function handler(req, res) {
   const email = customer?.emailAddress;
   const phone = customer?.phoneNumber;
 
-  // ✅ Basic validation
   if (!firstName || !lastName || !email || !phone || !startAt) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  // ✅ Build appointment date safely
   const appointmentDate = startAt
     ? new Date(startAt).toLocaleString('en-US', {
         timeZone: 'America/Chicago',
@@ -129,7 +257,6 @@ export default async function handler(req, res) {
     ? normalizedServices.map((s) => s.serviceName).join(', ')
     : 'None';
 
-  // ✅ Configure transporter
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -152,13 +279,11 @@ export default async function handler(req, res) {
 
       const startTime = new Date(startAt);
 
-      // ✅ FIXED: Calculate actual duration from services
       function calculateTotalDuration() {
         if (!Array.isArray(services) || services.length === 0) {
-          return 60 * 60 * 1000; // Default 1 hour if no services
+          return 60 * 60 * 1000;
         }
 
-        // Sum up all service durations (convert minutes to milliseconds)
         const totalMinutes = services.reduce((total, service) => {
           return total + parseDurationMinutes(service.durationMinutes);
         }, 0);
@@ -167,13 +292,11 @@ export default async function handler(req, res) {
           return 60 * 60 * 1000;
         }
 
-        return totalMinutes * 60 * 1000; // Convert minutes to milliseconds
+        return totalMinutes * 60 * 1000;
       }
 
       const totalDuration = calculateTotalDuration();
       const endTime = new Date(startTime.getTime() + totalDuration);
-
-      // Calculate total minutes for display
       const totalMinutes = totalDuration / (60 * 1000);
 
       const event = {
@@ -240,7 +363,6 @@ ${note || 'None'}
     }
   }
 
-  // 📧 Email 1: Notification to YOU
   const notificationMail = {
     from: `"Booking System" <${process.env.SMTP_USER}>`,
     to: process.env.WORK_EMAIL,
@@ -254,98 +376,22 @@ Phone: ${phone}
 Party Size: ${partySize || 1}
 Date & Time: ${appointmentDate}
 Total: ${totalFormatted || 'N/A'}
-Services: 
+Services:
 ${formattedServices}
 Note: ${note || 'None'}
     `,
   };
 
-  // 📧 Email 2: Confirmation to CUSTOMER
-  const confirmationMail = {
-    from: `"Sister Lavender Spa" <${process.env.SMTP_USER}>`,
-    to: email,
-    subject: `Booking Confirmation - ${appointmentDate}`,
-    html: `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .header { background: #f8f9fa; padding: 20px; text-align: center; }
-    .content { padding: 20px; }
-    .footer { background: #f8f9fa; padding: 15px; text-align: center; font-size: 14px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h2>Booking Confirmed! 🎉</h2>
-  </div>
-  <div class="content">
-    <p>Hi ${firstName},</p>
-    <p>Your appointment has been confirmed. We look forward to seeing you!</p>
-    
-    <h3>Appointment Details:</h3>
-    <p><strong>Date & Time:</strong> ${appointmentDate}</p>
-    <p><strong>Services:</strong></p>
-    ${formattedServicesHtml}
-    <p><strong>Party Size:</strong> ${partySize || 1}</p>
-    ${totalFormatted ? `<p><strong>Total:</strong> ${totalFormatted}</p>` : ''}
-    
-    <p><strong>Note:</strong> ${note || 'None provided'}</p>
-    
-    <p>Please arrive 10-15 minutes before your scheduled time.</p>
-    
-    <p>If you need to reschedule or cancel, please contact us at least 24 hours in advance.</p>
-  </div>
-  <div class="footer">
-    <p>Thank you for choosing us!<br>
-    Sister Lavender Spa<br>
-    Phone: (312) 900-3131<br>
-    Address: 2706 W Chicago Ave, Chicago, IL 60622</p>
-  </div>
-</body>
-</html>
-    `,
-    text: `
-Booking Confirmed!
-
-Hi ${firstName},
-
-Your appointment has been confirmed. We look forward to seeing you!
-
-Appointment Details:
-----------------------------
-Date & Time: ${appointmentDate}
-Services:
-${formattedServices}
-Party Size: ${partySize || 1}
-${totalFormatted ? `Total: ${totalFormatted}` : ''}
-Note: ${note || 'None provided'}
-
-Please arrive 10-15 minutes before your scheduled time.
-
-If you need to reschedule or cancel, please contact us at least 24 hours in advance.
-
-Thank you for choosing us!
-Sister Lavender Spa
-Phone: (312) 900-3131
-Address: 2706 W Chicago Ave, Chicago, IL 60622
-    `,
-  };
-
-  // ✅ Stripe: create or reuse customer (no DB)
   async function upsertStripeCustomer() {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
       apiVersion: '2024-06-20',
     });
 
-    // Try to find existing customer by email
     const existing = await stripe.customers.list({ email, limit: 1 });
     if (existing.data && existing.data.length > 0) {
       return existing.data[0];
     }
 
-    // Create new customer
     return await stripe.customers.create({
       email,
       name: `${firstName} ${lastName}`,
@@ -378,7 +424,11 @@ Address: 2706 W Chicago Ave, Chicago, IL 60622
       0
     );
 
-    await addDoc(collection(db, 'bookingAnalytics'), {
+    if (!adminDb) {
+      throw new Error('Admin Firestore is not configured');
+    }
+
+    await adminDb.collection('bookingAnalytics').add({
       bookedAt: new Date().toISOString(),
       startAt: startAt || null,
       locationId: locationId || null,
@@ -396,22 +446,79 @@ Address: 2706 W Chicago Ave, Chicago, IL 60622
     });
   }
 
-  try {
-    // 🗓️ 1. Add to Google Calendar
-    const calendarEvent = await addToGoogleCalendar();
+  async function saveCancelableBooking(calendarEvent) {
+    if (!adminDb) {
+      throw new Error('Admin Firestore is not configured');
+    }
 
-    // 📧 2. Send both emails
+    const bookingId = calendarEvent?.id;
+    if (!bookingId) throw new Error('Calendar event id missing from booking response');
+
+    const cancelToken = crypto.randomBytes(32).toString('hex');
+    const cancelTokenHash = hashCancelToken(cancelToken);
+
+    await adminDb.collection('customerBookings').doc(bookingId).set({
+      bookingId,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      canceledAt: null,
+      cancelTokenHash,
+      calendarEventId: bookingId,
+      calendarEventLink: calendarEvent?.htmlLink || '',
+      startAt: startAt || null,
+      locationId: locationId || null,
+      partySize: Number(partySize || 1),
+      totalFormatted: totalFormatted || null,
+      note: note || null,
+      customer: {
+        firstName: firstName || '',
+        lastName: lastName || '',
+        fullName: `${firstName} ${lastName}`.trim(),
+        email: (email || '').trim().toLowerCase(),
+        phone: phone || '',
+      },
+      services: normalizedServices,
+    });
+
+    return { bookingId, cancelToken };
+  }
+
+  try {
+    const calendarEvent = await addToGoogleCalendar();
+    let bookingId = null;
+    let cancelUrl = '';
+    if (isAdminConfigured) {
+      try {
+        const cancelData = await saveCancelableBooking(calendarEvent);
+        bookingId = cancelData.bookingId;
+        cancelUrl = `${getBaseUrl(req)}/cancel-booking?booking=${encodeURIComponent(cancelData.bookingId)}&token=${encodeURIComponent(cancelData.cancelToken)}`;
+      } catch (cancelPersistenceError) {
+        console.error('Cancelable booking persistence failed:', cancelPersistenceError);
+      }
+    } else {
+      console.warn('Admin Firestore not configured. Self-serve cancellation link disabled.');
+    }
+
+    const confirmationMail = buildConfirmationMail({
+      email,
+      firstName,
+      appointmentDate,
+      formattedServicesHtml,
+      formattedServices,
+      partySize,
+      totalFormatted,
+      note,
+      cancelUrl,
+    });
+
     await transporter.sendMail(notificationMail);
     await transporter.sendMail(confirmationMail);
 
-    // 💳 3. Add / reuse Stripe customer
     const stripeCustomer = await upsertStripeCustomer();
 
-    // 📈 4. Persist analytics event for booked services
     try {
       await logBookingAnalytics();
     } catch (analyticsError) {
-      // Non-blocking: booking should still succeed even if analytics write fails.
       console.error('Booking analytics write failed:', analyticsError);
     }
 
@@ -423,6 +530,10 @@ Address: 2706 W Chicago Ave, Chicago, IL 60622
         link: calendarEvent.htmlLink,
       },
       stripeCustomerId: stripeCustomer.id,
+      cancellation: {
+        bookingId,
+        selfServeEnabled: Boolean(bookingId),
+      },
     });
   } catch (err) {
     console.error('Error processing booking:', err);
