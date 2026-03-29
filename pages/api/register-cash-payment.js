@@ -1,6 +1,5 @@
-import { db } from '../../lib/firebase';
-import { addDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import Stripe from 'stripe';
+import { adminDb, isAdminConfigured } from '../../lib/firebaseAdmin';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -115,6 +114,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  if (!isAdminConfigured || !adminDb) {
+    return res.status(503).json({
+      error: 'Cash payment storage is unavailable. Configure Firebase admin credentials.',
+    });
+  }
+
   try {
     const {
       amount,
@@ -182,31 +187,29 @@ export default async function handler(req, res) {
         customer_name: resolvedCustomerName,
       };
 
-      const docRef = await addDoc(collection(db, 'cashPayments'), paymentDoc);
+      const docRef = await adminDb.collection('cashPayments').add(paymentDoc);
 
       // If customer info provided, also update a customer spending summary
       if (safeStripeCustomerId || resolvedCustomerEmail || resolvedCustomerPhone) {
         try {
-          const customerSpendingRef = collection(db, 'customerSpending');
+          const customerSpendingRef = adminDb.collection('customerSpending');
           const searchEmail = resolvedCustomerEmail;
 
           // Search for existing spending record by Stripe ID first, then email
-          let q = null;
+          let snapshots = { docs: [], size: 0 };
           if (safeStripeCustomerId) {
-            q = query(
-              customerSpendingRef,
-              where('stripeCustomerId', '==', safeStripeCustomerId)
-            );
+            snapshots = await customerSpendingRef
+              .where('stripeCustomerId', '==', safeStripeCustomerId)
+              .limit(1)
+              .get();
           } else if (searchEmail) {
-            q = query(customerSpendingRef, where('email', '==', searchEmail));
+            snapshots = await customerSpendingRef.where('email', '==', searchEmail).limit(1).get();
           }
-
-          const snapshots = q ? await getDocs(q) : { docs: [], size: 0 };
 
           if (snapshots.size > 0) {
             // Update existing record
             const existingDoc = snapshots.docs[0];
-            await updateDoc(existingDoc.ref, {
+            await existingDoc.ref.update({
               totalSpent: (existingDoc.data().totalSpent || 0) + amount,
               totalTransactions: (existingDoc.data().totalTransactions || 0) + 1,
               lastPaymentDate: timestamp,
@@ -214,7 +217,7 @@ export default async function handler(req, res) {
             });
           } else {
             // Create new spending record
-            await addDoc(customerSpendingRef, {
+            await customerSpendingRef.add({
               stripeCustomerId: safeStripeCustomerId,
               email: searchEmail,
               phone: resolvedCustomerPhone,
