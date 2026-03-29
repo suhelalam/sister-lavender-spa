@@ -4,6 +4,8 @@ import { useCart } from '../context/CartContext';
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Plus, Minus } from 'lucide-react';
 
+const BUSINESS_TIME_ZONE = 'America/Chicago';
+
 export default function AppointmentSummary({ selectedSlot }) {
   const { items, addItem, removeItem, isClient } = useCart();
   const [isOpen, setIsOpen] = useState(true);
@@ -104,6 +106,7 @@ export default function AppointmentSummary({ selectedSlot }) {
                       day: 'numeric',
                       hour: '2-digit',
                       minute: '2-digit',
+                      timeZone: BUSINESS_TIME_ZONE,
                     })}
                   </span>
                 </div>

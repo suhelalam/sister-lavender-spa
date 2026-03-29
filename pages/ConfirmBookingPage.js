@@ -6,6 +6,8 @@ import Modal from '../components/Modal';
 import OurPolicy from './our-policy';
 import ServiceAgreement from './service-agreement';
 
+const BUSINESS_TIME_ZONE = 'America/Chicago';
+
 export default function ConfirmBookingPage() {
   const { items, isClient, clearCart } = useCart();
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -274,12 +276,14 @@ export default function ConfirmBookingPage() {
                   weekday: 'long',
                   month: 'short',
                   day: 'numeric',
+                  timeZone: BUSINESS_TIME_ZONE,
                 })}
               </div>
               <div className="text-purple-700 font-medium">
                 {new Date(selectedSlot.startAt).toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit',
+                  timeZone: BUSINESS_TIME_ZONE,
                 })}{' '}
                 {/* – {new Date(selectedSlot.endAt).toLocaleTimeString([], {
                   hour: '2-digit',

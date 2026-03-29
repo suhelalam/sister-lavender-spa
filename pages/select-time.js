@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import AppointmentSummary from '../components/AppointmentSummary';
 
+const BUSINESS_TIME_ZONE = 'America/Chicago';
+
 export default function SelectTimePage() {
   const [services, setServices] = useState([]);
   const [availability, setAvailability] = useState([]);
@@ -15,7 +17,12 @@ export default function SelectTimePage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const formatDate = (date) => date.toISOString().split('T')[0];
+  const formatDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   const getStartOfWeek = (date) => {
     const copy = new Date(date);
@@ -63,23 +70,7 @@ export default function SelectTimePage() {
 
         const data = await res.json();
         if (data.success) {
-          // const closingHour = 20; // remove this line
-          const durationMinutes = services[0].duration || 60;
-
-          const filtered = data.availabilities.filter((slot) => {
-            const start = new Date(slot.startAt);
-            const end = new Date(start.getTime() + durationMinutes * 60000);
-
-            const day = start.getDay(); // Sunday = 0
-            const closingHour = day === 0 ? 18 : 20; // Sunday: 6PM, others: 8PM
-
-            return (
-              end.getHours() < closingHour ||
-              (end.getHours() === closingHour && end.getMinutes() === 0)
-            );
-          });
-
-          setAvailability(filtered);
+          setAvailability(Array.isArray(data.availabilities) ? data.availabilities : []);
         }
 
       } catch (err) {
@@ -176,23 +167,31 @@ export default function SelectTimePage() {
           ) : availability.length === 0 ? (
             <p>No slots available for this day.</p>
           ) : (
-            <ul className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {availability.map((slot, idx) => {
                 const start = new Date(slot.startAt);
                 const isSelected = selectedSlot?.startAt === slot.startAt;
                 return (
-                  <li
-                    key={idx}
+                  <button
+                    type="button"
+                    key={slot.startAt || idx}
                     onClick={() => handleSlotSelect(slot)}
-                    className={`p-3 border rounded shadow-sm cursor-pointer hover:bg-purple-50 ${
-                      isSelected ? 'bg-purple-100 border-purple-400' : 'bg-white'
+                    aria-pressed={isSelected}
+                    className={`h-12 w-full rounded border text-sm font-medium shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 ${
+                      isSelected
+                        ? 'border-purple-500 bg-purple-100 text-purple-900'
+                        : 'border-gray-300 bg-white text-gray-800 hover:bg-purple-50'
                     }`}
                   >
-                    {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </li>
+                    {start.toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      timeZone: BUSINESS_TIME_ZONE,
+                    })}
+                  </button>
                 );
               })}
-            </ul>
+            </div>
           )}
         </div>
 

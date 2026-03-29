@@ -4,23 +4,38 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 
+const BUSINESS_TIME_ZONE = 'America/Chicago';
+
 function formatDateInputValue(value) {
   if (!value) return '';
   try {
-    return new Date(value).toISOString().split('T')[0];
+    const date = new Date(value);
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: BUSINESS_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    const year = parts.find((part) => part.type === 'year')?.value || '';
+    const month = parts.find((part) => part.type === 'month')?.value || '';
+    const day = parts.find((part) => part.type === 'day')?.value || '';
+    return year && month && day ? `${year}-${month}-${day}` : '';
   } catch {
     return '';
   }
 }
 
-function getBookingDurationMinutes(services) {
-  if (!Array.isArray(services) || services.length === 0) return 60;
-  const total = services.reduce((sum, service) => {
-    const minutes = Math.max(0, Number(service?.durationMinutes || 0));
-    const qty = Math.max(1, Number(service?.quantity || 1));
-    return sum + minutes * qty;
-  }, 0);
-  return total > 0 ? total : 60;
+function todayInBusinessTz() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === 'year')?.value || '';
+  const month = parts.find((part) => part.type === 'month')?.value || '';
+  const day = parts.find((part) => part.type === 'day')?.value || '';
+  return year && month && day ? `${year}-${month}-${day}` : '';
 }
 
 export default function CancelBookingPage() {
@@ -138,8 +153,6 @@ export default function CancelBookingPage() {
     if (!canReschedule || !selectedDate) return;
 
     let mounted = true;
-    const durationMinutes = getBookingDurationMinutes(bookingDetails?.services);
-
     const loadAvailability = async () => {
       setLoadingAvailability(true);
       setSelectedSlot(null);
@@ -154,21 +167,8 @@ export default function CancelBookingPage() {
           throw new Error(data?.error || 'Could not fetch availability');
         }
 
-        const filtered = (Array.isArray(data.availabilities) ? data.availabilities : []).filter(
-          (slot) => {
-            const start = new Date(slot.startAt);
-            const end = new Date(start.getTime() + durationMinutes * 60000);
-            const day = start.getDay();
-            const closingHour = day === 0 ? 18 : 20;
-            return (
-              end.getHours() < closingHour ||
-              (end.getHours() === closingHour && end.getMinutes() === 0)
-            );
-          }
-        );
-
         if (!mounted) return;
-        setAvailability(filtered);
+        setAvailability(Array.isArray(data.availabilities) ? data.availabilities : []);
       } catch {
         if (!mounted) return;
         setAvailability([]);
@@ -284,7 +284,7 @@ export default function CancelBookingPage() {
               <input
                 type="date"
                 value={selectedDate}
-                min={new Date().toISOString().split('T')[0]}
+                min={todayInBusinessTz()}
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
               />
@@ -297,7 +297,7 @@ export default function CancelBookingPage() {
               ) : availability.length === 0 ? (
                 <div className="mt-2 text-xs text-gray-600">No available slots for this date.</div>
               ) : (
-                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {availability.map((slot, idx) => {
                     const isSelected = selectedSlot?.startAt === slot.startAt;
                     return (
@@ -305,15 +305,16 @@ export default function CancelBookingPage() {
                         key={`${slot.startAt}-${idx}`}
                         type="button"
                         onClick={() => setSelectedSlot(slot)}
-                        className={`rounded border px-2 py-1 text-xs ${
+                        className={`h-12 w-full rounded border text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
                           isSelected
-                            ? 'border-blue-500 bg-blue-100 text-blue-800'
-                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
+                            ? 'border-blue-500 bg-blue-100 text-blue-900'
+                            : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-100'
                         }`}
                       >
                         {new Date(slot.startAt).toLocaleTimeString([], {
                           hour: '2-digit',
                           minute: '2-digit',
+                          timeZone: BUSINESS_TIME_ZONE,
                         })}
                       </button>
                     );
