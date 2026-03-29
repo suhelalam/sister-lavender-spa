@@ -1,6 +1,35 @@
 import Stripe from 'stripe';
-import { db } from '../../../lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { adminDb, isAdminConfigured } from '../../../lib/firebaseAdmin';
+
+function toUnixSeconds(value, fallbackIso = null) {
+  if (!value && !fallbackIso) return Math.floor(Date.now() / 1000);
+
+  if (typeof value?.toDate === 'function') {
+    const date = value.toDate();
+    return Math.floor(date.getTime() / 1000);
+  }
+
+  if (value instanceof Date) {
+    return Math.floor(value.getTime() / 1000);
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    // Accept ms or seconds.
+    return value > 1e12 ? Math.floor(value / 1000) : Math.floor(value);
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
+  }
+
+  if (fallbackIso) {
+    const parsedFallback = Date.parse(fallbackIso);
+    if (Number.isFinite(parsedFallback)) return Math.floor(parsedFallback / 1000);
+  }
+
+  return Math.floor(Date.now() / 1000);
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -13,17 +42,66 @@ export default async function handler(req, res) {
     });
 
     const storedPaymentsByIntentId = new Map();
-    try {
-      const storedPaymentsSnapshot = await getDocs(collection(db, 'terminalCardPayments'));
-      storedPaymentsSnapshot.forEach((docSnap) => {
-        const data = docSnap.data() || {};
-        const intentId = String(data.paymentIntentId || docSnap.id || '').trim();
-        if (!intentId) return;
-        storedPaymentsByIntentId.set(intentId, data);
-      });
-    } catch (firestoreError) {
-      // Keep receipts page usable even if Firestore read is unavailable.
-      console.warn('Failed to load terminalCardPayments fallback data:', firestoreError);
+    const cashReceipts = [];
+    if (isAdminConfigured && adminDb) {
+      try {
+        const storedPaymentsSnapshot = await adminDb.collection('terminalCardPayments').get();
+        storedPaymentsSnapshot.forEach((docSnap) => {
+          const data = docSnap.data() || {};
+          const intentId = String(data.paymentIntentId || docSnap.id || '').trim();
+          if (!intentId) return;
+          storedPaymentsByIntentId.set(intentId, data);
+        });
+      } catch (firestoreError) {
+        // Keep receipts page usable even if Firestore read is unavailable.
+        console.warn('Failed to load terminalCardPayments fallback data:', firestoreError);
+      }
+
+      try {
+        const cashSnapshot = await adminDb.collection('cashPayments').get();
+        cashSnapshot.forEach((docSnap) => {
+          const data = docSnap.data() || {};
+          const receiptNumber = String(data.receiptNumber || '').trim();
+          const id = receiptNumber || `cash-${docSnap.id}`;
+          const amountCents = Math.max(0, Math.round(Number(data.amount || 0)));
+          const discountAmountCents = Math.max(
+            0,
+            Math.round(Number(data.discountAmount || 0) * 100)
+          );
+          const createdUnixSeconds = toUnixSeconds(data.createdAt, data.timestamp);
+
+          cashReceipts.push({
+            id,
+            amount: amountCents,
+            currency: 'usd',
+            created: createdUnixSeconds,
+            metadata: { payment_type: 'cash' },
+            customer: data.stripeCustomerId || null,
+            description: 'Cash payment',
+            receipt_email: data.customerEmail || data.customer_email || null,
+            receipt_url: null,
+            customer_name: data.customerName || data.customer_name || null,
+            customer_phone: data.customerPhone || data.customer_phone || null,
+            customer_email: data.customerEmail || data.customer_email || null,
+            coupon_code: data.couponCode || '',
+            coupon_id: '',
+            promotion_code_id: '',
+            coupon_name: '',
+            coupon_discount_type: '',
+            coupon_percent_off: null,
+            coupon_amount_off_cents: 0,
+            coupon_currency: '',
+            coupon_discount_display: '',
+            discount_amount_cents: discountAmountCents,
+            processing_fee_amount_cents: 0,
+            tip_amount_cents: 0,
+            pre_tip_amount_cents: amountCents,
+            stored_services: Array.isArray(data.services) ? data.services : [],
+          });
+        });
+      } catch (cashError) {
+        console.warn('Failed to load cashPayments for receipts:', cashError);
+      }
     }
 
     // List payment intents, limit to 100 for now, then filter by succeeded
@@ -143,7 +221,11 @@ export default async function handler(req, res) {
       })
     );
 
-    res.status(200).json({ receipts });
+    const combinedReceipts = [...receipts, ...cashReceipts].sort(
+      (a, b) => Number(b.created || 0) - Number(a.created || 0)
+    );
+
+    res.status(200).json({ receipts: combinedReceipts });
   } catch (error) {
     console.error('Error fetching receipts:', error);
     res.status(500).json({ error: 'Failed to fetch receipts' });
