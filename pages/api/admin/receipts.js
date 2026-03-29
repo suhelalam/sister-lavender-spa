@@ -45,10 +45,26 @@ export default async function handler(req, res) {
         const customer = pi.customer && typeof pi.customer === 'object' ? pi.customer : null;
         const customerEmail = customer?.email || null;
         const chargeDetails = charge?.billing_details || {};
-        const customerName = chargeDetails?.name || customer?.name || null;
-        const customerPhone = chargeDetails?.phone || customer?.phone || null;
         const metadata = pi.metadata || {};
         const storedPayment = storedPaymentsByIntentId.get(pi.id) || null;
+        const customerName =
+          chargeDetails?.name ||
+          customer?.name ||
+          storedPayment?.customerName ||
+          metadata.customer_name ||
+          null;
+        const customerPhone =
+          chargeDetails?.phone ||
+          customer?.phone ||
+          storedPayment?.customerPhone ||
+          metadata.customer_phone ||
+          null;
+        const customerEmailResolved =
+          (charge ? charge.receipt_email : null) ||
+          customerEmail ||
+          storedPayment?.customerEmail ||
+          metadata.customer_email ||
+          null;
         const tipFromStripe = Number(
           charge?.amount_details?.tip?.amount ?? pi?.amount_details?.tip?.amount
         );
@@ -93,11 +109,11 @@ export default async function handler(req, res) {
           metadata,
           customer: pi.customer,
           description: pi.description,
-          receipt_email: charge ? charge.receipt_email : customerEmail,
+          receipt_email: customerEmailResolved,
           receipt_url: charge ? charge.receipt_url : null,
           customer_name: customerName,
           customer_phone: customerPhone,
-          customer_email: charge ? charge.receipt_email || customerEmail : customerEmail,
+          customer_email: customerEmailResolved,
           coupon_code: storedPayment?.couponCode || metadata.coupon_code || '',
           coupon_id: storedPayment?.couponId || metadata.coupon_id || '',
           promotion_code_id: storedPayment?.promotionCodeId || metadata.promotion_code_id || '',

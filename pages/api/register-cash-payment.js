@@ -131,6 +131,31 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid amount' });
     }
 
+    const safeStripeCustomerId = String(stripeCustomerId || '').trim() || null;
+    let resolvedCustomerEmail = customerEmail ? String(customerEmail).toLowerCase().trim() : null;
+    let resolvedCustomerPhone = customerPhone ? String(customerPhone).trim() : null;
+    let resolvedCustomerName = customerName ? String(customerName).trim() : null;
+
+    // If a Stripe customer is selected, backfill missing customer fields from Stripe.
+    if (safeStripeCustomerId) {
+      try {
+        const stripeCustomer = await stripe.customers.retrieve(safeStripeCustomerId);
+        if (!stripeCustomer.deleted) {
+          if (!resolvedCustomerEmail && stripeCustomer.email) {
+            resolvedCustomerEmail = String(stripeCustomer.email).toLowerCase().trim();
+          }
+          if (!resolvedCustomerPhone && stripeCustomer.phone) {
+            resolvedCustomerPhone = String(stripeCustomer.phone).trim();
+          }
+          if (!resolvedCustomerName && stripeCustomer.name) {
+            resolvedCustomerName = String(stripeCustomer.name).trim();
+          }
+        }
+      } catch (stripeLookupError) {
+        console.warn('Failed to fetch Stripe customer for cash payment:', stripeLookupError);
+      }
+    }
+
     // Generate receipt number (timestamp-based for simplicity)
     const receiptNumber = `CASH-${Date.now()}`;
     const timestamp = new Date().toISOString();
@@ -147,26 +172,30 @@ export default async function handler(req, res) {
         timestamp: timestamp,
         createdAt: new Date(),
         // Customer reference (Stripe ID is primary)
-        stripeCustomerId: stripeCustomerId || null,
-        customerEmail: customerEmail ? customerEmail.toLowerCase() : null,
-        customerPhone: customerPhone || null,
-        customerName: customerName || null,
+        stripeCustomerId: safeStripeCustomerId,
+        customerEmail: resolvedCustomerEmail,
+        customerPhone: resolvedCustomerPhone,
+        customerName: resolvedCustomerName,
+        // Alias keys for consistency with receipt payload shapes.
+        customer_email: resolvedCustomerEmail,
+        customer_phone: resolvedCustomerPhone,
+        customer_name: resolvedCustomerName,
       };
 
       const docRef = await addDoc(collection(db, 'cashPayments'), paymentDoc);
 
       // If customer info provided, also update a customer spending summary
-      if (stripeCustomerId || customerEmail || customerPhone) {
+      if (safeStripeCustomerId || resolvedCustomerEmail || resolvedCustomerPhone) {
         try {
           const customerSpendingRef = collection(db, 'customerSpending');
-          const searchEmail = customerEmail ? customerEmail.toLowerCase() : null;
+          const searchEmail = resolvedCustomerEmail;
 
           // Search for existing spending record by Stripe ID first, then email
           let q = null;
-          if (stripeCustomerId) {
+          if (safeStripeCustomerId) {
             q = query(
               customerSpendingRef,
-              where('stripeCustomerId', '==', stripeCustomerId)
+              where('stripeCustomerId', '==', safeStripeCustomerId)
             );
           } else if (searchEmail) {
             q = query(customerSpendingRef, where('email', '==', searchEmail));
@@ -186,10 +215,10 @@ export default async function handler(req, res) {
           } else {
             // Create new spending record
             await addDoc(customerSpendingRef, {
-              stripeCustomerId: stripeCustomerId || null,
+              stripeCustomerId: safeStripeCustomerId,
               email: searchEmail,
-              phone: customerPhone || null,
-              name: customerName || null,
+              phone: resolvedCustomerPhone,
+              name: resolvedCustomerName,
               totalSpent: amount,
               totalTransactions: 1,
               lastPaymentDate: timestamp,
@@ -215,7 +244,7 @@ export default async function handler(req, res) {
       amount: amount,
       services: services,
       discountAmount: discountAmount,
-      customerTracked: !!(stripeCustomerId || customerEmail || customerPhone),
+      customerTracked: !!(safeStripeCustomerId || resolvedCustomerEmail || resolvedCustomerPhone),
     });
   } catch (error) {
     console.error('Cash payment registration failed:', error);

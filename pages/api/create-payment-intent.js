@@ -15,6 +15,10 @@ export default async function handler(req, res) {
       amount,
       currency = 'usd',
       services = [],
+      stripe_customer_id = '',
+      customer_name = '',
+      customer_email = '',
+      customer_phone = '',
       coupon_code = '',
       coupon_id = '',
       promotion_code_id = '',
@@ -88,14 +92,27 @@ export default async function handler(req, res) {
     if (safeProcessingFeeAmountCents > 0) {
       metadata.processing_fee_amount_cents = String(safeProcessingFeeAmountCents);
     }
+    const safeCustomerName = String(customer_name || '').trim();
+    const safeCustomerEmail = String(customer_email || '').trim().toLowerCase();
+    const safeCustomerPhone = String(customer_phone || '').trim();
+    const safeStripeCustomerId = String(stripe_customer_id || '').trim();
+    if (safeCustomerName) metadata.customer_name = safeCustomerName.slice(0, 100);
+    if (safeCustomerEmail) metadata.customer_email = safeCustomerEmail.slice(0, 100);
+    if (safeCustomerPhone) metadata.customer_phone = safeCustomerPhone.slice(0, 40);
+    if (safeStripeCustomerId) metadata.stripe_customer_id = safeStripeCustomerId.slice(0, 100);
 
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntentPayload = {
       amount,
       currency,
       payment_method_types: ['card_present'],
       capture_method: 'automatic',
       metadata,
-    });
+    };
+    if (safeStripeCustomerId) {
+      paymentIntentPayload.customer = safeStripeCustomerId;
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create(paymentIntentPayload);
 
     try {
       await setDoc(doc(db, 'terminalCardPayments', paymentIntent.id), {
@@ -103,6 +120,10 @@ export default async function handler(req, res) {
         amount: Math.max(0, Math.round(Number(amount || 0))),
         currency: String(currency || 'usd').toLowerCase(),
         services: safeServices,
+        stripeCustomerId: safeStripeCustomerId || null,
+        customerName: safeCustomerName || null,
+        customerEmail: safeCustomerEmail || null,
+        customerPhone: safeCustomerPhone || null,
         couponCode: coupon_code ? String(coupon_code).slice(0, 100) : '',
         couponId: coupon_id ? String(coupon_id).slice(0, 100) : '',
         promotionCodeId: promotion_code_id ? String(promotion_code_id).slice(0, 100) : '',
