@@ -40,9 +40,7 @@ export default function SelectTimePage() {
 
   const getStartOfWeek = (date) => {
     const copy = new Date(date);
-    // Monday-first week: Mon=0 ... Sun=6
-    const mondayIndex = (copy.getDay() + 6) % 7;
-    copy.setDate(copy.getDate() - mondayIndex);
+    copy.setDate(copy.getDate() - copy.getDay());
     copy.setHours(0, 0, 0, 0);
     return copy;
   };
@@ -148,7 +146,7 @@ export default function SelectTimePage() {
 
           {/* Weekdays */}
           <div className="grid grid-cols-7 text-center mb-2 gap-1 text-sm font-medium text-gray-600">
-            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
               <div key={i}>{d}</div>
             ))}
           </div>
