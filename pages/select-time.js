@@ -5,17 +5,31 @@ import AppointmentSummary from '../components/AppointmentSummary';
 
 const BUSINESS_TIME_ZONE = 'America/Chicago';
 
+function getTodayInBusinessTimeZone() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+
+  return new Date(`${year}-${month}-${day}T00:00:00`);
+}
+
 export default function SelectTimePage() {
   const [services, setServices] = useState([]);
   const [availability, setAvailability] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(() => getTodayInBusinessTimeZone());
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = getTodayInBusinessTimeZone();
 
   const formatDate = (date) => {
     const year = date.getFullYear();
@@ -26,7 +40,9 @@ export default function SelectTimePage() {
 
   const getStartOfWeek = (date) => {
     const copy = new Date(date);
-    copy.setDate(copy.getDate() - copy.getDay());
+    // Monday-first week: Mon=0 ... Sun=6
+    const mondayIndex = (copy.getDay() + 6) % 7;
+    copy.setDate(copy.getDate() - mondayIndex);
     copy.setHours(0, 0, 0, 0);
     return copy;
   };
@@ -132,7 +148,7 @@ export default function SelectTimePage() {
 
           {/* Weekdays */}
           <div className="grid grid-cols-7 text-center mb-2 gap-1 text-sm font-medium text-gray-600">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
               <div key={i}>{d}</div>
             ))}
           </div>
