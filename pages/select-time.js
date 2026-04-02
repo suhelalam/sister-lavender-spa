@@ -5,38 +5,43 @@ import AppointmentSummary from '../components/AppointmentSummary';
 
 const BUSINESS_TIME_ZONE = 'America/Chicago';
 
-function getTodayInBusinessTimeZone() {
+function getBusinessDateParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: BUSINESS_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(new Date());
+  }).formatToParts(date);
 
   const year = parts.find((part) => part.type === 'year')?.value;
   const month = parts.find((part) => part.type === 'month')?.value;
   const day = parts.find((part) => part.type === 'day')?.value;
 
-  return new Date(`${year}-${month}-${day}T00:00:00`);
+  return { year, month, day };
+}
+
+function getBusinessDateKey(date = new Date()) {
+  const { year, month, day } = getBusinessDateParts(date);
+  return `${year}-${month}-${day}`;
+}
+
+function localDateFromKey(dateKey) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
 }
 
 export default function SelectTimePage() {
   const [services, setServices] = useState([]);
   const [availability, setAvailability] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(() => getTodayInBusinessTimeZone());
+  const [selectedDate, setSelectedDate] = useState(() => localDateFromKey(getBusinessDateKey()));
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const today = getTodayInBusinessTimeZone();
-
-  const formatDate = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  const todayKey = getBusinessDateKey();
+  const today = localDateFromKey(todayKey);
+  const formatDate = (date) => getBusinessDateKey(date);
 
   const getStartOfWeek = (date) => {
     const copy = new Date(date);
@@ -154,8 +159,9 @@ export default function SelectTimePage() {
           {/* Day Buttons */}
           <div className="grid grid-cols-7 gap-1 mb-4">
             {weekDates.map((date, i) => {
-              const isPast = date < today;
-              const isSelected = date.toDateString() === selectedDate.toDateString();
+              const dateKey = formatDate(date);
+              const isPast = dateKey < todayKey;
+              const isSelected = dateKey === formatDate(selectedDate);
 
               return (
                 <button

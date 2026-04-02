@@ -248,7 +248,9 @@ export default function ConfirmBookingPage() {
           <button
             type="button"
             onClick={() => setShowPolicy(true)}
-            className="text-purple-600 underline"
+            aria-haspopup="dialog"
+            aria-expanded={showPolicy}
+            className="text-purple-600 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-600 focus-visible:rounded-sm"
           >
             See full policy
           </button>
@@ -259,7 +261,9 @@ export default function ConfirmBookingPage() {
           <button
             type="button"
             onClick={() => setShowServiceAgreement(true)}
-            className="text-purple-600 underline"
+            aria-haspopup="dialog"
+            aria-expanded={showServiceAgreement}
+            className="text-purple-600 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-600 focus-visible:rounded-sm"
           >
             service-agreement
           </button>

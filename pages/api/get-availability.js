@@ -116,6 +116,21 @@ function parseTimeValue(value, fallbackHour, fallbackMinute) {
   return { hour, minute };
 }
 
+function getBusinessTodayDateString() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return `${year}-${month}-${day}`;
+}
+
 export default async function handler(req, res) {
   const { startDate } = req.body;
 
@@ -170,6 +185,15 @@ export default async function handler(req, res) {
 
   try {
     if (!startDate) return res.status(400).json({ success: false, error: 'startDate required' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      return res.status(400).json({ success: false, error: "Invalid startDate format" });
+    }
+
+    // Do not expose any availability for dates before today's business date.
+    const businessToday = getBusinessTodayDateString();
+    if (startDate < businessToday) {
+      return res.status(200).json({ success: true, availabilities: [] });
+    }
 
     const businessHours = await loadBusinessHours();
     const slots = generateTimeSlots(startDate, businessHours);
