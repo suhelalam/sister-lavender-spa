@@ -47,6 +47,13 @@ export default function SelectTimePage() {
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
+  const formatAccessibleDate = (date) =>
+    date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
 
   const getStartOfWeek = (date) => {
     const copy = new Date(date);
@@ -170,9 +177,13 @@ export default function SelectTimePage() {
 
               return (
                 <button
+                  type="button"
                   key={i}
                   disabled={isPast}
                   onClick={() => setSelectedDate(date)}
+                  aria-pressed={isSelected}
+                  aria-label={`${formatAccessibleDate(date)}${isSelected ? ', selected' : ''}`}
+                  title={formatAccessibleDate(date)}
                   className={`rounded-full h-10 w-10 mx-auto flex items-center justify-center transition
                     ${isSelected ? 'bg-purple-600 text-white' : ''}
                     ${isPast ? 'text-gray-300 line-through cursor-not-allowed' : 'hover:bg-purple-100'}

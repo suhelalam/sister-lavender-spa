@@ -147,6 +147,9 @@ export default function Layout({ children }) {
 
   return (
     <>
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
       <header className="bg-white shadow-md px-4 md:px-8 py-4 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <Link href="/" className="text-lg font-bold hover:text-purple-600 transition">
@@ -273,7 +276,9 @@ export default function Layout({ children }) {
         )}
       </header>
 
-      <main className="page-container min-h-screen">{children}</main>
+      <main id="main-content" tabIndex={-1} className="page-container min-h-screen">
+        {children}
+      </main>
 
       <footer className="bg-gray-100 text-gray-700 mt-12 px-6 py-10 text-sm">
         <div className="max-w-5xl mx-auto grid gap-8 md:grid-cols-3">
