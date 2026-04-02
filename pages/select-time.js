@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AppointmentSummary from '../components/AppointmentSummary';
 
 const BUSINESS_TIME_ZONE = 'America/Chicago';
@@ -38,6 +38,7 @@ export default function SelectTimePage() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const appointmentSummaryRef = useRef(null);
 
   const todayKey = getBusinessDateKey();
   const today = localDateFromKey(todayKey);
@@ -117,6 +118,10 @@ export default function SelectTimePage() {
   const handleSlotSelect = (slot) => {
     setSelectedSlot(slot);
     sessionStorage.setItem('selectedSlot', JSON.stringify(slot));
+    requestAnimationFrame(() => {
+      appointmentSummaryRef.current?.focus();
+      appointmentSummaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
   };
 
   const goToPreviousWeek = () => {
@@ -232,7 +237,11 @@ export default function SelectTimePage() {
         </div>
 
         {/* RIGHT: Appointment Summary */}
-        <div className="w-full lg:w-80">
+        <div
+          ref={appointmentSummaryRef}
+          tabIndex={-1}
+          className="w-full lg:w-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2"
+        >
           <AppointmentSummary selectedSlot={selectedSlot} />
         </div>
       </div>
