@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Head from 'next/head';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useServices } from '../context/ServicesContext';
@@ -38,12 +37,6 @@ function HomeContent() {
 
   return (
     <>
-      <Head>
-        <title>Sister Lavender Spa - Head Spa, Massage, and Nail Services</title>
-        <meta name="description" content="Relax and rejuvenate at Sister Lavender Spa. We offer professional head spa treatments, therapeutic massages, and expert nail services in Chicago. Book your appointment today!" />
-        <link rel="icon" href="/favicon-96x96.png" />
-      </Head>
-
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-6 bg-purple-50">
         {/* Logo */}
         <Image
