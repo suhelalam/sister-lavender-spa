@@ -478,6 +478,12 @@ Note: ${note || 'None'}
         phone: phone || '',
       },
       services: normalizedServices,
+      followUpEmail: {
+        status: 'scheduled',
+        sendAt: new Date(new Date(startAt).getTime() + (2 * 60 * 60 * 1000)).toISOString(),
+        sentAt: null,
+        error: null,
+      },
     });
 
     return { bookingId, cancelToken };

@@ -366,7 +366,6 @@ export default function AdminReceiptsPage() {
           <p><strong>Date:</strong> ${date}</p>
           <p><strong>Customer:</strong> ${transaction.customer_name || 'N/A'}</p>
           <p><strong>Email:</strong> ${transaction.customer_email || transaction.receipt_email || 'N/A'}</p>
-          <p><strong>Phone:</strong> ${transaction.customer_phone || 'N/A'}</p>
           <div>
             <strong>Services:</strong>
             ${
@@ -614,7 +613,6 @@ export default function AdminReceiptsPage() {
                       <p><span className="font-medium text-gray-900">Date:</span> {date}</p>
                       <p><span className="font-medium text-gray-900">Customer:</span> {transaction.customer_name || 'N/A'}</p>
                       <p><span className="font-medium text-gray-900">Email:</span> {transaction.customer_email || transaction.receipt_email || 'N/A'}</p>
-                      <p><span className="font-medium text-gray-900">Phone:</span> {transaction.customer_phone || 'N/A'}</p>
                     </div>
 
                     <div className="mt-4 rounded-xl bg-gray-50 p-3">
