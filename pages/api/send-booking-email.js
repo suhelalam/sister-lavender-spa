@@ -480,7 +480,7 @@ Note: ${note || 'None'}
       services: normalizedServices,
       followUpEmail: {
         status: 'scheduled',
-        sendAt: new Date(new Date(startAt).getTime() + (2 * 60 * 60 * 1000)).toISOString(), // 2 hours after appointment
+        sendAt: new Date(new Date(startAt).getTime() + (2 * 60 * 60 * 1000)).toISOString(), // 2 hours after appointment start time
         sentAt: null,
         error: null,
       },
