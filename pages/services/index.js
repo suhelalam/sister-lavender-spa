@@ -46,7 +46,7 @@ const getPrimaryVariation = (addOn) => {
 };
 
 export default function Services() {
-  const { services, addOns, loading } = useServices();
+  const { activeServices: services, activeAddOns: addOns, loading } = useServices();
   const { items, addItem } = useCart();
   const [expandedCategory, setExpandedCategory] = useState(null);
 

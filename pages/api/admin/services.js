@@ -61,6 +61,7 @@ function normalizeServiceInput(rawService) {
     price: typeof rawService.price === "string" ? rawService.price : `$${Number(rawService.price || 0).toFixed(2)}`,
     image: String(rawService.image || "").trim(),
     isAddOn: Boolean(rawService.isAddOn),
+    isActive: rawService.isActive !== false,
     appliesToCategory: String(rawService.appliesToCategory || "").trim(),
     stripeProductId: rawService.stripeProductId || null,
     variations: [],

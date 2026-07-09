@@ -6,7 +6,7 @@ import { useCart } from '../context/CartContext';
 import { useState } from 'react';
 
 export default function BookingPage() {
-  const { services, loading } = useServices();
+  const { activeServices: services, loading } = useServices();
   const { addItem } = useCart();
   const [selectedService, setSelectedService] = useState(null);
 

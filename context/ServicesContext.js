@@ -24,6 +24,7 @@ const normalizeService = (service) => ({
   image: service.image || "",
   variations: Array.isArray(service.variations) ? service.variations : [],
   isAddOn: Boolean(service.isAddOn),
+  isActive: service.isActive !== false,
   appliesToCategory: service.appliesToCategory || "",
 });
 
@@ -131,6 +132,7 @@ const buildAddOnServicePayload = (addOnInput, existingService) => {
     price: toDisplayPrice(priceCents),
     image: "",
     isAddOn: true,
+    isActive: addOnInput.isActive !== false,
     variations: [
       {
         id: variationId,
@@ -147,6 +149,16 @@ const buildAddOnServicePayload = (addOnInput, existingService) => {
 export const ServicesProvider = ({ children }) => {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const activeServices = useMemo(
+    () => services.filter((service) => service.isActive !== false),
+    [services]
+  );
+
+  const activeAddOns = useMemo(
+    () => activeServices.filter((service) => service.isAddOn),
+    [activeServices]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -286,7 +298,9 @@ export const ServicesProvider = ({ children }) => {
     <ServicesContext.Provider
       value={{
         services,
+        activeServices,
         addOns,
+        activeAddOns,
         loading,
         addService,
         updateService,

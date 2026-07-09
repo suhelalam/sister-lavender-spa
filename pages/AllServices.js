@@ -5,7 +5,7 @@ import ServiceCard from '../components/ServiceCard';
 import { serviceCategories } from '../lib/servicesData';
 
 export default function AllServices() {
-  const { services, loading } = useServices();
+  const { activeServices: services, loading } = useServices();
 
   if (loading) {
     return (

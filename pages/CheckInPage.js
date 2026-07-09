@@ -438,37 +438,38 @@ export default function CheckInPage() {
                         ) : (
                           Object.entries(filteredWalkInOptionsByCategory).map(([category, services]) => (
                             <div key={category} className="space-y-2">
-                            <p className="text-sm font-semibold text-gray-900">{category}</p>
-                            <div className="space-y-2">
-                              {services.map((service) => (
-                                <label key={service.id} className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedServiceIds.includes(service.id)}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked;
-                                      setSelectedServiceIds((current) => {
-                                        if (checked) {
-                                          return [...current, service.id];
-                                        }
-                                        return current.filter((id) => id !== service.id);
-                                      });
-                                    }}
-                                    disabled={isSubmitting}
-                                    className="mt-1 h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                  />
-                                  <div className="flex-1 text-sm">
-                                    <div className="font-medium text-gray-900">{service.label}</div>
-                                    <div className="text-gray-600">{service.description}</div>
-                                    <div className="mt-1 text-xs text-gray-500">
-                                      {service.durationMinutes} min · {service.priceLabel}
+                              <p className="text-sm font-semibold text-gray-900">{category}</p>
+                              <div className="space-y-2">
+                                {services.map((service) => (
+                                  <label key={service.id} className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedServiceIds.includes(service.id)}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setSelectedServiceIds((current) => {
+                                          if (checked) {
+                                            return [...current, service.id];
+                                          }
+                                          return current.filter((id) => id !== service.id);
+                                        });
+                                      }}
+                                      disabled={isSubmitting}
+                                      className="mt-1 h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                    />
+                                    <div className="flex-1 text-sm">
+                                      <div className="font-medium text-gray-900">{service.label}</div>
+                                      <div className="text-gray-600">{service.description}</div>
+                                      <div className="mt-1 text-xs text-gray-500">
+                                        {service.durationMinutes} min · {service.priceLabel}
+                                      </div>
                                     </div>
-                                  </div>
-                                </label>
-                              ))}
+                                  </label>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                       {errors.service ? <p className="mt-1 text-sm text-red-600">{errors.service}</p> : null}
                     </div>

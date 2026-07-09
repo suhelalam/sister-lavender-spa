@@ -4,7 +4,7 @@ import { useServices } from '../../context/ServicesContext';
 import ServiceCard from '../../components/ServiceCard';
 
 export default function BodyHarmonyPage() {
-  const { services, loading } = useServices();
+  const { activeServices: services, loading } = useServices();
 
   if (loading) return <p>Loading services...</p>;
 

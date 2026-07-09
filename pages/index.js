@@ -6,7 +6,7 @@ import ServiceCard from '../components/ServiceCard';
 import { defaultAnnouncements } from '../lib/homeSettings';
 
 function HomeContent() {
-  const { services } = useServices();
+  const { activeServices: services } = useServices();
   const [announcements, setAnnouncements] = useState([]);
   const [announcementsLoading, setAnnouncementsLoading] = useState(true);
 

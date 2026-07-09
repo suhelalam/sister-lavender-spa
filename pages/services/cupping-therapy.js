@@ -4,7 +4,7 @@ import { useServices } from '../../context/ServicesContext';
 import ServiceCard from '../../components/ServiceCard';
 
 export default function CuppingTherapyPage() {
-  const { services, loading } = useServices();
+  const { activeServices: services, loading } = useServices();
 
   if (loading) return <p className="text-center py-10">Loading services...</p>;
 

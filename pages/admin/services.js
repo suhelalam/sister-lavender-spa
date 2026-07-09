@@ -36,6 +36,7 @@ export default function AdminServicesPage() {
     duration: '',
     price: '',
     image: '',
+    isActive: true,
     variations: []
   });
   
@@ -92,6 +93,7 @@ export default function AdminServicesPage() {
         duration: editingService.duration,
         price: editingService.price,
         image: editingService.image,
+        isActive: editingService.isActive !== false,
         variations: editingService.variations || []
       });
     }
@@ -120,6 +122,7 @@ export default function AdminServicesPage() {
       duration: parseInt(formData.duration),
       price: displayPrice,
       image: formData.image,
+      isActive: formData.isActive !== false,
       variations: formData.variations.map(variation => ({
         id: variation.id || `${formData.name.toLowerCase().replace(/\s+/g, '-')}-${variation.name.toLowerCase().replace(/\s+/g, '-')}`,
         name: variation.name,
@@ -187,6 +190,7 @@ export default function AdminServicesPage() {
       duration: '',
       price: '',
       image: '',
+      isActive: true,
       variations: []
     });
     setEditingService(null);
@@ -232,6 +236,21 @@ export default function AdminServicesPage() {
       } finally {
         setSaving(false);
       }
+    }
+  };
+
+  const handleToggleServiceStatus = async (service) => {
+    if (saving) return;
+
+    const nextStatus = service.isActive === false;
+    setSaving(true);
+    try {
+      await updateService(service.id, { ...service, isActive: nextStatus });
+    } catch (error) {
+      console.error("Failed to update service visibility:", error);
+      alert(`Failed to update service visibility: ${error.message || String(error)}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -510,6 +529,19 @@ export default function AdminServicesPage() {
                     className="w-full p-2 border rounded"
                     placeholder="/images/service-name.jpg"
                   />
+                </div>
+
+                <div className="md:col-span-2 flex items-center gap-3 rounded border border-gray-200 p-3 bg-gray-50">
+                  <input
+                    type="checkbox"
+                    id="service-active"
+                    checked={formData.isActive !== false}
+                    onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <label htmlFor="service-active" className="text-sm font-medium text-gray-700">
+                    Show this service to customers
+                  </label>
                 </div>
               </div>
               
@@ -811,7 +843,18 @@ export default function AdminServicesPage() {
                           </div>
                         )}
                       </div>
-                      <div className="flex gap-1 ml-2">
+                      <div className="flex flex-wrap items-center gap-2 ml-2">
+                        <span className={`rounded-full px-2 py-1 text-xs font-medium ${service.isActive === false ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {service.isActive === false ? 'Disabled' : 'Active'}
+                        </span>
+                        <button
+                          onClick={() => handleToggleServiceStatus(service)}
+                          disabled={saving}
+                          className={`text-sm px-2 py-1 rounded ${service.isActive === false ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                          title={service.isActive === false ? 'Enable service' : 'Disable service'}
+                        >
+                          {service.isActive === false ? 'Turn On' : 'Turn Off'}
+                        </button>
                         <button
                           onClick={() => handleEditService(service)}
                           className="text-blue-500 hover:text-blue-700 text-sm px-2 py-1"
@@ -885,7 +928,18 @@ export default function AdminServicesPage() {
                           <div className="text-xs text-gray-500 mt-1">{addOn.description}</div>
                         ) : null}
                       </div>
-                      <div className="flex gap-1 ml-2">
+                      <div className="flex flex-wrap items-center gap-2 ml-2">
+                        <span className={`rounded-full px-2 py-1 text-xs font-medium ${addOn.isActive === false ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {addOn.isActive === false ? 'Disabled' : 'Active'}
+                        </span>
+                        <button
+                          onClick={() => handleToggleServiceStatus(addOn)}
+                          disabled={saving}
+                          className={`text-sm px-2 py-1 rounded ${addOn.isActive === false ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                          title={addOn.isActive === false ? 'Enable add-on' : 'Disable add-on'}
+                        >
+                          {addOn.isActive === false ? 'Turn On' : 'Turn Off'}
+                        </button>
                         <button
                           onClick={() => handleEditAddOn(addOn)}
                           className="text-blue-500 hover:text-blue-700 text-sm px-2 py-1"
