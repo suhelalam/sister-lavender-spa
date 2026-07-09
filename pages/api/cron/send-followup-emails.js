@@ -21,6 +21,7 @@ function formatAppointmentDate(startAt) {
     minute: '2-digit',
   });
 }
+// test
 
 function buildPostVisitFollowUpMail({ email, firstName, appointmentDate }) {
   const reviewUrl = process.env.REVIEW_URL || 'https://g.page/r/CWJDaqiAGB-iEAE/review';
