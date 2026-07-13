@@ -54,6 +54,7 @@ export default function ServiceCard({ service, image = '', variant = 'default' }
 
     addItem({
       id: selectedVariation.id,
+      serviceId: service.id || service.name,
       name: service.name,
       variationName: selectedVariation.name,
       price: selectedVariation.price,

@@ -49,7 +49,7 @@ const getPrimaryVariation = (addOn) => {
 
 export default function Services() {
   const { activeServices: services, activeAddOns: addOns, loading } = useServices();
-  const { items, addItem } = useCart();
+  const { items, addItem, clearCart } = useCart();
   const router = useRouter();
   const [expandedCategory, setExpandedCategory] = useState(null);
   const [restoredFromUrl, setRestoredFromUrl] = useState(false);
@@ -139,6 +139,8 @@ export default function Services() {
       return;
     }
 
+    clearCart();
+
     ids.forEach((id) => {
       const match = services.find(
         (service) =>
@@ -162,6 +164,7 @@ export default function Services() {
 
       addItem({
         id: variation.id,
+        serviceId: match.id || match.name,
         name: match.name,
         variationName: variation.name,
         price: Number(variation.price || 0),
@@ -175,7 +178,7 @@ export default function Services() {
     });
 
     setRestoredFromUrl(true);
-  }, [addItem, loading, restoredFromUrl, router, router.isReady, services]);
+  }, [addItem, clearCart, loading, restoredFromUrl, router, router.isReady, services]);
 
   const toggleCategory = (categorySlug) => {
     setExpandedCategory((current) => (current === categorySlug ? null : categorySlug));

@@ -8,7 +8,7 @@ import { useRouter } from 'next/router';
 
 export default function BookingPage() {
   const { activeServices: services, loading } = useServices();
-  const { addItem } = useCart();
+  const { addItem, clearCart } = useCart();
   const [selectedService, setSelectedService] = useState(null);
   const router = useRouter();
   const [preselectedProcessed, setPreselectedProcessed] = useState(false);
@@ -42,6 +42,7 @@ export default function BookingPage() {
       const variation = service.variations[0];
       addItem({
         id: variation.id,
+        serviceId: service.id || service.name,
         name: service.name,
         variationName: variation.name,
         price: variation.price,
@@ -67,6 +68,7 @@ export default function BookingPage() {
       };
       addItem({
         id: variation.id,
+        serviceId: service.id || service.name,
         name: service.name,
         variationName: variation.name,
         price: variation.price,
@@ -87,6 +89,8 @@ export default function BookingPage() {
 
     const raw = router.query.services || router.query.service;
     if (!raw) return setPreselectedProcessed(true);
+
+    clearCart();
 
     let ids = [];
     if (Array.isArray(raw)) {
@@ -111,7 +115,7 @@ export default function BookingPage() {
     });
 
     setPreselectedProcessed(true);
-  }, [loading, router, router.isReady, services, preselectedProcessed, handleServiceClick]);
+  }, [loading, router, router.isReady, services, preselectedProcessed, handleServiceClick, clearCart]);
 
   if (loading) {
     return (

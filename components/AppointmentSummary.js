@@ -17,7 +17,7 @@ export default function AppointmentSummary({ selectedSlot }) {
     if (!router?.isReady) return;
 
     const activeIds = items
-      .map((item) => item.id)
+      .map((item) => item.serviceId || item.id || item.name)
       .filter(Boolean);
 
     const currentQuery = normalizeServiceIds(router.query.services || router.query.service || '');

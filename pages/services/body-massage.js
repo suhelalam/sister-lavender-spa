@@ -9,7 +9,7 @@ import { normalizeServiceIds, slugifyServiceValue } from '../../lib/serviceShare
 
 export default function BodyMassagePage() {
   const { activeServices: services, loading } = useServices();
-  const { addItem } = useCart();
+  const { addItem, clearCart } = useCart();
   const router = useRouter();
 
   useEffect(() => {
@@ -17,6 +17,8 @@ export default function BodyMassagePage() {
 
     const ids = normalizeServiceIds(router.query.services || router.query.service || '');
     if (ids.length === 0) return;
+
+    clearCart();
 
     ids.forEach((id) => {
       const match = services.find(
@@ -41,6 +43,7 @@ export default function BodyMassagePage() {
 
       addItem({
         id: variation.id,
+        serviceId: match.id || match.name,
         name: match.name,
         variationName: variation.name,
         price: Number(variation.price || 0),
@@ -52,7 +55,7 @@ export default function BodyMassagePage() {
         isAddOn: false,
       });
     });
-  }, [addItem, loading, router, router.isReady, services]);
+  }, [addItem, clearCart, loading, router, router.isReady, services]);
 
   if (loading) return <p className="text-center py-10">Loading services...</p>;
 
