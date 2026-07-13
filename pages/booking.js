@@ -3,7 +3,7 @@
 import AppointmentSummary from '../components/AppointmentSummary';
 import { useServices } from '../context/ServicesContext';
 import { useCart } from '../context/CartContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 
 export default function BookingPage() {
@@ -13,37 +13,29 @@ export default function BookingPage() {
   const router = useRouter();
   const [preselectedProcessed, setPreselectedProcessed] = useState(false);
 
-  if (loading) {
-    return (
-      <div className="p-6 max-w-6xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-4 text-purple-700">Choose Services</h1>
-        <p className="text-gray-500">Loading services...</p>
-      </div>
+  const updateUrlWithService = useCallback((idToAdd) => {
+    if (!router || !router.isReady) return;
+
+    const rawExisting = router.query.services || router.query.service || '';
+    let existingIds = [];
+    if (Array.isArray(rawExisting)) {
+      existingIds = rawExisting.flatMap((r) => String(r).split(',').map((s) => s.trim()));
+    } else {
+      existingIds = String(rawExisting).split(',').map((s) => s.trim()).filter(Boolean);
+    }
+
+    const merged = Array.from(new Set([...existingIds, String(idToAdd).trim()].filter(Boolean)));
+
+    router.push(
+      { pathname: '/booking', query: { services: merged.join(',') } },
+      undefined,
+      { shallow: true }
     );
-  }
+  }, [router]);
 
-  const handleServiceClick = (service) => {
+  const handleServiceClick = useCallback((service) => {
     setSelectedService(service);
-    const updateUrlWithService = (idToAdd) => {
-      if (!router || !router.isReady) return;
 
-      const rawExisting = router.query.services || router.query.service || '';
-      let existingIds = [];
-      if (Array.isArray(rawExisting)) {
-        existingIds = rawExisting.flatMap(r => String(r).split(',').map(s => s.trim()));
-      } else {
-        existingIds = String(rawExisting).split(',').map(s => s.trim()).filter(Boolean);
-      }
-
-      const merged = Array.from(new Set([...existingIds, String(idToAdd).trim()].filter(Boolean)));
-
-      router.push(
-        { pathname: '/booking', query: { services: merged.join(',') } },
-        undefined,
-        { shallow: true }
-      );
-    };
-    
     // For services with variations, we'll let the user select from dropdown in a modal or detailed view
     // For now, just add the first variation or create one from basic fields
     if (service.variations && service.variations.length > 0) {
@@ -68,10 +60,10 @@ export default function BookingPage() {
         name: 'Standard',
         price: parseFloat(service.price.replace(/[^\d.]/g, '')) * 100,
         currency: 'USD',
-        duration: (typeof service.duration === 'string' 
-          ? parseInt(service.duration) 
+        duration: (typeof service.duration === 'string'
+          ? parseInt(service.duration)
           : service.duration) * 60000,
-        version: 1
+        version: 1,
       };
       addItem({
         id: variation.id,
@@ -87,7 +79,7 @@ export default function BookingPage() {
       });
       updateUrlWithService(service.id || service.name);
     }
-  };
+  }, [addItem, updateUrlWithService]);
 
   // When user navigates to /booking?service=service-id or /booking?services=id1,id2
   useEffect(() => {
@@ -98,9 +90,9 @@ export default function BookingPage() {
 
     let ids = [];
     if (Array.isArray(raw)) {
-      ids = raw.flatMap(r => String(r).split(',').map(s => s.trim()));
+      ids = raw.flatMap((r) => String(r).split(',').map((s) => s.trim()));
     } else {
-      ids = String(raw).split(',').map(s => s.trim());
+      ids = String(raw).split(',').map((s) => s.trim());
     }
 
     const slugify = (text = '') =>
@@ -119,7 +111,16 @@ export default function BookingPage() {
     });
 
     setPreselectedProcessed(true);
-  }, [loading, router, router.isReady, services, preselectedProcessed]);
+  }, [loading, router, router.isReady, services, preselectedProcessed, handleServiceClick]);
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto">
+        <h1 className="text-2xl font-semibold mb-4 text-purple-700">Choose Services</h1>
+        <p className="text-gray-500">Loading services...</p>
+      </div>
+    );
+  }
 
   const formatDuration = (minutes) => {
     const h = Math.floor(minutes / 60);
