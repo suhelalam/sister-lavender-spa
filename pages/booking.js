@@ -3,12 +3,15 @@
 import AppointmentSummary from '../components/AppointmentSummary';
 import { useServices } from '../context/ServicesContext';
 import { useCart } from '../context/CartContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 
 export default function BookingPage() {
   const { activeServices: services, loading } = useServices();
   const { addItem } = useCart();
   const [selectedService, setSelectedService] = useState(null);
+  const router = useRouter();
+  const [preselectedProcessed, setPreselectedProcessed] = useState(false);
 
   if (loading) {
     return (
@@ -21,6 +24,25 @@ export default function BookingPage() {
 
   const handleServiceClick = (service) => {
     setSelectedService(service);
+    const updateUrlWithService = (idToAdd) => {
+      if (!router || !router.isReady) return;
+
+      const rawExisting = router.query.services || router.query.service || '';
+      let existingIds = [];
+      if (Array.isArray(rawExisting)) {
+        existingIds = rawExisting.flatMap(r => String(r).split(',').map(s => s.trim()));
+      } else {
+        existingIds = String(rawExisting).split(',').map(s => s.trim()).filter(Boolean);
+      }
+
+      const merged = Array.from(new Set([...existingIds, String(idToAdd).trim()].filter(Boolean)));
+
+      router.push(
+        { pathname: '/booking', query: { services: merged.join(',') } },
+        undefined,
+        { shallow: true }
+      );
+    };
     
     // For services with variations, we'll let the user select from dropdown in a modal or detailed view
     // For now, just add the first variation or create one from basic fields
@@ -38,6 +60,7 @@ export default function BookingPage() {
         category: service.category || '',
         isAddOn: false,
       });
+      updateUrlWithService(service.id || service.name);
     } else {
       // Create a variation from basic fields
       const variation = {
@@ -62,8 +85,41 @@ export default function BookingPage() {
         category: service.category || '',
         isAddOn: false,
       });
+      updateUrlWithService(service.id || service.name);
     }
   };
+
+  // When user navigates to /booking?service=service-id or /booking?services=id1,id2
+  useEffect(() => {
+    if (loading || !router.isReady || preselectedProcessed) return;
+
+    const raw = router.query.services || router.query.service;
+    if (!raw) return setPreselectedProcessed(true);
+
+    let ids = [];
+    if (Array.isArray(raw)) {
+      ids = raw.flatMap(r => String(r).split(',').map(s => s.trim()));
+    } else {
+      ids = String(raw).split(',').map(s => s.trim());
+    }
+
+    const slugify = (text = '') =>
+      String(text)
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/[^\w-]/g, '');
+
+    ids.forEach((id) => {
+      if (!id) return;
+      const service = services.find(
+        (s) => s.id === id || slugify(s.name) === id || String(s.name).toLowerCase() === id.toLowerCase()
+      );
+      if (service) handleServiceClick(service);
+    });
+
+    setPreselectedProcessed(true);
+  }, [loading, router, router.isReady, services, preselectedProcessed]);
 
   const formatDuration = (minutes) => {
     const h = Math.floor(minutes / 60);
