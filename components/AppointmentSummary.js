@@ -1,14 +1,35 @@
 'use client';
 
+import { useRouter } from 'next/router';
 import { useCart } from '../context/CartContext';
-import { useState } from 'react';
+import { buildServiceLink, normalizeServiceIds } from '../lib/serviceShareLinks';
+import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, Plus, Minus } from 'lucide-react';
 
 const BUSINESS_TIME_ZONE = 'America/Chicago';
 
 export default function AppointmentSummary({ selectedSlot }) {
   const { items, addItem, removeItem, isClient } = useCart();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(true);
+
+  useEffect(() => {
+    if (!router?.isReady) return;
+
+    const activeIds = items
+      .map((item) => item.id)
+      .filter(Boolean);
+
+    const currentQuery = normalizeServiceIds(router.query.services || router.query.service || '');
+    const queryValue = activeIds.length > 0 ? activeIds : [];
+
+    if (currentQuery.join(',') === queryValue.join(',')) return;
+
+    const destination = buildServiceLink({ router, serviceIds: queryValue });
+
+    router.push(destination, undefined, { shallow: true });
+  }, [items, router]);
+
   if (!isClient) return <div className="p-4">Loading...</div>;
 
   const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);

@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { ChevronDown } from 'lucide-react';
 import { useServices } from '../../context/ServicesContext';
 import { useCart } from '../../context/CartContext';
+import { normalizeServiceIds, slugifyServiceValue } from '../../lib/serviceShareLinks';
 import ServiceCard from '../../components/ServiceCard';
 import AppointmentSummary from '../../components/AppointmentSummary';
 import { serviceCategories } from '../../lib/servicesData';
@@ -132,28 +133,17 @@ export default function Services() {
   useEffect(() => {
     if (loading || !router.isReady || restoredFromUrl) return;
 
-    const raw = router.query.services || router.query.service;
-    if (!raw) {
+    const ids = normalizeServiceIds(router.query.services || router.query.service || '');
+    if (ids.length === 0) {
       setRestoredFromUrl(true);
       return;
     }
-
-    const ids = (Array.isArray(raw) ? raw : [raw])
-      .flatMap((value) => String(value).split(',').map((part) => part.trim()))
-      .filter(Boolean);
-
-    const slugify = (value = '') =>
-      String(value)
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, '-')
-        .replace(/[^\w-]/g, '');
 
     ids.forEach((id) => {
       const match = services.find(
         (service) =>
           service.id === id ||
-          slugify(service.name) === id ||
+          slugifyServiceValue(service.name) === id ||
           String(service.name).toLowerCase() === id.toLowerCase()
       );
 

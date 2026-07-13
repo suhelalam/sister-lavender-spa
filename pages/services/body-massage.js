@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useServices } from '../../context/ServicesContext';
 import { useCart } from '../../context/CartContext';
 import ServiceCard from '../../components/ServiceCard';
+import { normalizeServiceIds, slugifyServiceValue } from '../../lib/serviceShareLinks';
 
 export default function BodyMassagePage() {
   const { activeServices: services, loading } = useServices();
@@ -14,25 +15,14 @@ export default function BodyMassagePage() {
   useEffect(() => {
     if (loading || !router.isReady) return;
 
-    const raw = router.query.services || router.query.service;
-    if (!raw) return;
-
-    const ids = (Array.isArray(raw) ? raw : [raw])
-      .flatMap((value) => String(value).split(',').map((part) => part.trim()))
-      .filter(Boolean);
-
-    const slugify = (value = '') =>
-      String(value)
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, '-')
-        .replace(/[^\w-]/g, '');
+    const ids = normalizeServiceIds(router.query.services || router.query.service || '');
+    if (ids.length === 0) return;
 
     ids.forEach((id) => {
       const match = services.find(
         (service) =>
           service.id === id ||
-          slugify(service.name) === id ||
+          slugifyServiceValue(service.name) === id ||
           String(service.name).toLowerCase() === id.toLowerCase()
       );
 

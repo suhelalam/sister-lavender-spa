@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/router';
 import { useCart } from '../../context/CartContext';
+import { buildServiceLink, normalizeServiceIds } from '../../lib/serviceShareLinks';
 import { useState } from 'react';
 import Image from 'next/image';
 
@@ -65,20 +66,11 @@ export default function ServiceCard({ service, image = '', variant = 'default' }
     });
 
     if (router?.isReady) {
-      const rawExisting = router.query.services || router.query.service || '';
-      let existingIds = [];
-      if (Array.isArray(rawExisting)) {
-        existingIds = rawExisting.flatMap((value) => String(value).split(',').map((part) => part.trim()));
-      } else {
-        existingIds = String(rawExisting).split(',').map((value) => value.trim()).filter(Boolean);
-      }
-
+      const existingIds = normalizeServiceIds(router.query.services || router.query.service || '');
       const merged = Array.from(new Set([...existingIds, service.id || service.name].filter(Boolean)));
-      router.push(
-        { pathname: '/services', query: { services: merged.join(',') } },
-        undefined,
-        { shallow: true }
-      );
+      const destination = buildServiceLink({ router, serviceIds: merged });
+
+      router.push(destination, undefined, { shallow: true });
     }
   };
 
