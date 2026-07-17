@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { useServices } from '../../context/ServicesContext';
 import { useCart } from '../../context/CartContext';
 import {
-  getServiceIdsFromCountQuery,
+  getServiceSelectionsFromCountQuery,
   legacySlugifyServiceValue,
   normalizeServiceIds,
   slugifyServiceValue,
@@ -138,33 +138,46 @@ export default function Services() {
   useEffect(() => {
     if (loading || !router.isReady || restoredFromUrl) return;
 
-    const countIds = getServiceIdsFromCountQuery(router.query);
-    const ids = countIds.length > 0
-      ? countIds
-      : normalizeServiceIds(
+    const countSelections = getServiceSelectionsFromCountQuery(router.query);
+    const legacyIds = normalizeServiceIds(
           router.query.services || router.query.service || router.query.slug || ''
         );
-    if (ids.length === 0) {
+    const selections = countSelections.length > 0
+      ? countSelections
+      : legacyIds.map((selectionKey) => ({ selectionKey, count: 1 }));
+
+    if (selections.length === 0) {
       setRestoredFromUrl(true);
       return;
     }
 
     clearCart();
 
-    ids.forEach((id) => {
-      const match = services.find(
-        (service) =>
-          service.id === id ||
-          slugifyServiceValue(service.id) === id ||
-          slugifyServiceValue(service.name) === id ||
-          legacySlugifyServiceValue(service.id) === id ||
-          legacySlugifyServiceValue(service.name) === id ||
-          String(service.name).toLowerCase() === id.toLowerCase()
-      );
+    selections.forEach(({ selectionKey, count }) => {
+      let selectedVariation = null;
+      const match = services.find((service) => {
+        const matchesService =
+          service.id === selectionKey ||
+          slugifyServiceValue(service.id) === selectionKey ||
+          slugifyServiceValue(service.name) === selectionKey ||
+          legacySlugifyServiceValue(service.id) === selectionKey ||
+          legacySlugifyServiceValue(service.name) === selectionKey ||
+          String(service.name).toLowerCase() === selectionKey.toLowerCase();
+
+        if (matchesService) return true;
+
+        const serviceSlug = slugifyServiceValue(service.name || service.id);
+        selectedVariation = (service.variations || []).find((variation) => {
+          const variationSlug = slugifyServiceValue(variation.name || variation.id || 'standard');
+          return `${serviceSlug}--${variationSlug}` === selectionKey;
+        }) || null;
+
+        return Boolean(selectedVariation);
+      });
 
       if (!match) return;
 
-      const variation = Array.isArray(match.variations) && match.variations.length > 0
+      const variation = selectedVariation || (Array.isArray(match.variations) && match.variations.length > 0
         ? match.variations[0]
         : {
             id: match.name,
@@ -173,21 +186,23 @@ export default function Services() {
             duration: (typeof match.duration === 'string' ? Number.parseInt(match.duration, 10) : Number(match.duration || 0)) * 60000,
             currency: 'USD',
             version: 1,
-          };
+          });
 
-      addItem({
-        id: variation.id,
-        serviceId: match.id || match.name,
-        name: match.name,
-        variationName: variation.name,
-        price: Number(variation.price || 0),
-        currency: variation.currency || 'USD',
-        quantity: 1,
-        duration: Number(variation.duration || 0),
-        version: variation.version || 1,
-        category: match.category || '',
-        isAddOn: false,
-      });
+      for (let index = 0; index < count; index += 1) {
+        addItem({
+          id: variation.id,
+          serviceId: match.id || match.name,
+          name: match.name,
+          variationName: variation.name,
+          price: Number(variation.price || 0),
+          currency: variation.currency || 'USD',
+          quantity: 1,
+          duration: Number(variation.duration || 0),
+          version: variation.version || 1,
+          category: match.category || '',
+          isAddOn: false,
+        });
+      }
     });
 
     setRestoredFromUrl(true);

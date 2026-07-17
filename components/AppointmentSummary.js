@@ -27,9 +27,11 @@ export default function AppointmentSummary({ selectedSlot }) {
         const shareValue = item.name || item.serviceId || item.id;
         if (!shareValue) return counts;
 
-        const slug = slugifyServiceValue(shareValue);
+        const serviceSlug = slugifyServiceValue(shareValue);
+        const variationSlug = slugifyServiceValue(item.variationName || item.id || 'standard');
+        const selectionKey = `${serviceSlug}--${variationSlug}`;
         const quantity = Math.max(1, Number.parseInt(item.quantity, 10) || 1);
-        counts.set(slug, (counts.get(slug) || 0) + quantity);
+        counts.set(selectionKey, (counts.get(selectionKey) || 0) + quantity);
         return counts;
       }, new Map());
 
