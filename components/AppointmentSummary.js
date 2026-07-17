@@ -1,8 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/router';
 import { useCart } from '../context/CartContext';
-import { buildServiceLink, normalizeServiceIds } from '../lib/serviceShareLinks';
+import { slugifyServiceValue } from '../lib/serviceShareLinks';
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, Plus, Minus } from 'lucide-react';
 
@@ -10,25 +9,49 @@ const BUSINESS_TIME_ZONE = 'America/Chicago';
 
 export default function AppointmentSummary({ selectedSlot }) {
   const { items, addItem, removeItem, isClient } = useCart();
-  const router = useRouter();
   const [isOpen, setIsOpen] = useState(true);
 
   useEffect(() => {
-    if (!router?.isReady) return;
+    // Wait for the persisted cart to hydrate. Otherwise the initial empty
+    // server state can incorrectly erase a valid shared-service URL.
+    if (!isClient || typeof window === 'undefined') return;
 
-    const activeIds = items
-      .map((item) => item.serviceId || item.id || item.name)
-      .filter(Boolean);
+    // Only the main services page supports service share links.
+    if (window.location.pathname !== '/services') return;
 
-    const currentQuery = normalizeServiceIds(router.query.services || router.query.service || '');
-    const queryValue = activeIds.length > 0 ? activeIds : [];
+    const serviceCounts = items
+      .filter((item) => !item.isAddOn)
+      .reduce((counts, item) => {
+        // The display name is the stable share value. Some older records have
+        // shortened emoji-prefixed IDs that do not match their full names.
+        const shareValue = item.name || item.serviceId || item.id;
+        if (!shareValue) return counts;
 
-    if (currentQuery.join(',') === queryValue.join(',')) return;
+        const slug = slugifyServiceValue(shareValue);
+        const quantity = Math.max(1, Number.parseInt(item.quantity, 10) || 1);
+        counts.set(slug, (counts.get(slug) || 0) + quantity);
+        return counts;
+      }, new Map());
 
-    const destination = buildServiceLink({ router, serviceIds: queryValue });
+    const params = new URLSearchParams(window.location.search);
+    params.delete('service');
+    params.delete('services');
+    Array.from(params.keys())
+      .filter((key) => key.endsWith('-count'))
+      .forEach((key) => params.delete(key));
 
-    router.push(destination, undefined, { shallow: true });
-  }, [items, router]);
+    serviceCounts.forEach((count, slug) => {
+      params.set(`${slug}-count`, String(count));
+    });
+
+    const query = params.toString();
+    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState(window.history.state, '', nextUrl);
+    }
+  }, [items, isClient]);
 
   if (!isClient) return <div className="p-4">Loading...</div>;
 

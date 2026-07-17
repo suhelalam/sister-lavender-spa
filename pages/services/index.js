@@ -3,7 +3,12 @@ import { useRouter } from 'next/router';
 import { ChevronDown } from 'lucide-react';
 import { useServices } from '../../context/ServicesContext';
 import { useCart } from '../../context/CartContext';
-import { normalizeServiceIds, slugifyServiceValue } from '../../lib/serviceShareLinks';
+import {
+  getServiceIdsFromCountQuery,
+  legacySlugifyServiceValue,
+  normalizeServiceIds,
+  slugifyServiceValue,
+} from '../../lib/serviceShareLinks';
 import ServiceCard from '../../components/ServiceCard';
 import AppointmentSummary from '../../components/AppointmentSummary';
 import { serviceCategories } from '../../lib/servicesData';
@@ -133,7 +138,12 @@ export default function Services() {
   useEffect(() => {
     if (loading || !router.isReady || restoredFromUrl) return;
 
-    const ids = normalizeServiceIds(router.query.services || router.query.service || '');
+    const countIds = getServiceIdsFromCountQuery(router.query);
+    const ids = countIds.length > 0
+      ? countIds
+      : normalizeServiceIds(
+          router.query.services || router.query.service || router.query.slug || ''
+        );
     if (ids.length === 0) {
       setRestoredFromUrl(true);
       return;
@@ -145,7 +155,10 @@ export default function Services() {
       const match = services.find(
         (service) =>
           service.id === id ||
+          slugifyServiceValue(service.id) === id ||
           slugifyServiceValue(service.name) === id ||
+          legacySlugifyServiceValue(service.id) === id ||
+          legacySlugifyServiceValue(service.name) === id ||
           String(service.name).toLowerCase() === id.toLowerCase()
       );
 

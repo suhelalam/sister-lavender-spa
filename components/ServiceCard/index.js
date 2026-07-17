@@ -1,8 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/router';
 import { useCart } from '../../context/CartContext';
-import { buildServiceLink, normalizeServiceIds } from '../../lib/serviceShareLinks';
 import { useState } from 'react';
 import Image from 'next/image';
 
@@ -28,7 +26,6 @@ function parsePrice(price) {
 
 export default function ServiceCard({ service, image = '', variant = 'default' }) {
   const { addItem } = useCart();
-  const router = useRouter();
 
   // Check if service has variations or needs to use basic fields
   const hasVariations = service?.variations && service.variations.length > 0;
@@ -66,13 +63,6 @@ export default function ServiceCard({ service, image = '', variant = 'default' }
       isAddOn: false,
     });
 
-    if (router?.isReady) {
-      const existingIds = normalizeServiceIds(router.query.services || router.query.service || '');
-      const merged = Array.from(new Set([...existingIds, service.id || service.name].filter(Boolean)));
-      const destination = buildServiceLink({ router, serviceIds: merged });
-
-      router.push(destination, undefined, { shallow: true });
-    }
   };
 
   if (variant === 'slim') {
