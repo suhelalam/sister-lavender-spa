@@ -2,6 +2,7 @@
 import Stripe from 'stripe';
 import { db } from '../../lib/firebase';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { adminDb, isAdminConfigured } from '../../lib/firebaseAdmin';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2024-06-20',
@@ -30,6 +31,10 @@ export default async function handler(req, res) {
       coupon_discount_display = '',
       discount_amount_cents = 0,
       processing_fee_amount_cents = 0,
+      customer_id = '',
+      visit_id = '',
+      reward_points_to_redeem = 0,
+      reward_discount_amount_cents = 0,
     } = req.body || {};
 
     const safeServices = Array.isArray(services)
@@ -100,6 +105,23 @@ export default async function handler(req, res) {
     if (safeCustomerEmail) metadata.customer_email = safeCustomerEmail.slice(0, 100);
     if (safeCustomerPhone) metadata.customer_phone = safeCustomerPhone.slice(0, 40);
     if (safeStripeCustomerId) metadata.stripe_customer_id = safeStripeCustomerId.slice(0, 100);
+    if (customer_id) metadata.customer_id = String(customer_id).slice(0, 100);
+    if (visit_id) metadata.visit_id = String(visit_id).slice(0, 100);
+    const safeRewardPoints = Math.max(0, Math.round(Number(reward_points_to_redeem || 0)));
+    const safeRewardDiscountCents = Math.max(0, Math.round(Number(reward_discount_amount_cents || 0)));
+    if (safeRewardPoints > 0) {
+      if (safeRewardPoints !== 500 || safeRewardDiscountCents !== 1000 || !customer_id) {
+        return res.status(400).json({ error: 'Invalid rewards redemption.' });
+      }
+      if (!isAdminConfigured || !adminDb) return res.status(503).json({ error: 'Rewards are temporarily unavailable.' });
+      const customerSnapshot = await adminDb.collection('customers').doc(String(customer_id)).get();
+      const customer = customerSnapshot.data();
+      if (!customerSnapshot.exists || !customer?.rewards?.enrolled || Number(customer.pointsBalance || 0) < 500) {
+        return res.status(409).json({ error: 'Customer does not have enough points to redeem this reward.' });
+      }
+      metadata.reward_points_to_redeem = '500';
+      metadata.reward_discount_amount_cents = '1000';
+    }
 
     const paymentIntentPayload = {
       amount,
@@ -138,6 +160,8 @@ export default async function handler(req, res) {
           : '',
         discountAmountCents: safeDiscountAmountCents,
         processingFeeAmountCents: safeProcessingFeeAmountCents,
+        rewardPointsToRedeem: safeRewardPoints,
+        rewardDiscountAmountCents: safeRewardDiscountCents,
         createdAt: serverTimestamp(),
       });
     } catch (persistError) {

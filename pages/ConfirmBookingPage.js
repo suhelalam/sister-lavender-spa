@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import Modal from '../components/Modal';
 import OurPolicy from './our-policy';
 import ServiceAgreement from './service-agreement';
+import { Check, LoaderCircle } from 'lucide-react';
 
 const BUSINESS_TIME_ZONE = 'America/Chicago';
 
@@ -20,16 +21,30 @@ export default function ConfirmBookingPage() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [rewardsOptIn, setRewardsOptIn] = useState(false);
+  const [rewardsLocked, setRewardsLocked] = useState(false);
+  const [customerId, setCustomerId] = useState('');
+  const [lookupState, setLookupState] = useState({ loading: false, message: '', type: '' });
   const [note, setNote] = useState('');
   const [partySize, setPartySize] = useState(1);
 
   const [loading, setLoading] = useState(false);
+  const [booked, setBooked] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const storedSlot = sessionStorage.getItem('selectedSlot');
     if (storedSlot) setSelectedSlot(JSON.parse(storedSlot));
   }, []);
+
+  useEffect(() => {
+    if (!loading && !booked) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [loading, booked]);
 
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const totalFormatted = `$${(total / 100).toFixed(2)}`;
@@ -84,6 +99,46 @@ export default function ConfirmBookingPage() {
     throw new Error('Invalid phone number format');
   }
 
+  const lookupCustomer = async () => {
+    setLookupState({ loading: true, message: '', type: '' });
+    try {
+      const response = await fetch('/api/crm/booking-customer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, email }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      const customer = data.customer;
+      setCustomerId(customer.id);
+      if (customer.firstName) setFirstName(customer.firstName);
+      if (customer.lastName) setLastName(customer.lastName);
+      if (customer.phone) setPhone(customer.phone);
+      if (customer.email) setEmail(customer.email);
+      setRewardsOptIn(customer.rewardsEnrolled);
+      setRewardsLocked(customer.rewardsEnrolled);
+      setLookupState({
+        loading: false, type: 'success',
+        message: customer.rewardsEnrolled
+          ? `Welcome back! You currently have ${customer.pointsBalance} reward points.`
+          : 'Welcome back! We found your profile. You can join rewards below if you would like.',
+      });
+    } catch (lookupError) {
+      setCustomerId('');
+      setRewardsLocked(false);
+      setLookupState({ loading: false, type: 'error', message: lookupError.message });
+    }
+  };
+
+  const changeCustomerIdentity = (setter) => (event) => {
+    setter(event.target.value);
+    if (customerId) {
+      setCustomerId('');
+      setRewardsLocked(false);
+      setRewardsOptIn(false);
+      setLookupState({ loading: false, message: 'Contact information changed. Find the profile again to reconnect rewards.', type: 'error' });
+    }
+  };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -128,7 +183,10 @@ export default function ConfirmBookingPage() {
             locationId,
             totalFormatted,
             partySize,
-            note // test notes are added or not
+            note,
+            customerId,
+            rewardsOptIn,
+            marketingOptIn,
           }),
         });
 
@@ -138,10 +196,13 @@ export default function ConfirmBookingPage() {
         throw new Error(bookingData.error || 'Failed to book appointment');
         }
 
-        alert('Booking successful! Your appointment is confirmed.');
-        // Redirect or clear form if needed
+        setBooked(true);
         clearCart();
-        window.location.href = '/';
+        sessionStorage.removeItem('selectedSlot');
+        sessionStorage.removeItem('services');
+        window.setTimeout(() => {
+          window.location.href = '/';
+        }, 1800);
 
     } catch (err) {
         setError(err.message);
@@ -161,8 +222,6 @@ export default function ConfirmBookingPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <section className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-800">Contact Info</h2>
-          {/* <div className="text-sm text-purple-700 cursor-pointer hover:underline">Sign in</div> */}
-
           <div className="flex gap-2 items-center">
             <span className="text-sm font-medium whitespace-nowrap rounded border border-gray-300 bg-gray-50 px-3 py-2">
               US +1
@@ -172,7 +231,7 @@ export default function ConfirmBookingPage() {
               placeholder="(000) 000-0000"
               className="border rounded px-3 py-2 w-full"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={changeCustomerIdentity(setPhone)}
               required
             />
           </div>
@@ -213,9 +272,18 @@ export default function ConfirmBookingPage() {
             placeholder="Email"
             className="border rounded px-3 py-2 w-full"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={changeCustomerIdentity(setEmail)}
             required
           />
+
+          <div className="rounded-xl border border-[#ded3e0] bg-[#f8f4f9] p-4">
+            <h3 className="font-semibold text-[#423846]">Returning guest?</h3>
+            <p className="mt-1 text-xs leading-5 text-stone-600">Use the phone number or email above to find your profile and keep your visits and rewards together.</p>
+            <button type="button" onClick={lookupCustomer} disabled={lookupState.loading || (!phone.trim() && !email.trim())} className="button-secondary mt-3">
+              {lookupState.loading ? 'Finding profile…' : 'Find my profile'}
+            </button>
+            {lookupState.message && <p className={`mt-3 text-sm ${lookupState.type === 'success' ? 'text-green-700' : 'text-amber-700'}`} role="status">{lookupState.message}</p>}
+          </div>
 
           <label className="flex items-start gap-2 text-sm">
             <input
@@ -227,6 +295,11 @@ export default function ConfirmBookingPage() {
             <span>
               Text me marketing and loyalty offers from Sister Lavender Spa. You consent to receive marketing texts, including Loyalty messages, coupons, and discounts, via the phone number you provided from this business. Text STOP to unsubscribe from texts from this business at any time, or HELP for more information. MSG and data rates may apply. Joining this program is not a condition of purchase. You certify that you are at least 18 years of age.
             </span>
+          </label>
+
+          <label className="flex items-start gap-3 rounded-xl border border-[#d8dfd2] bg-[#f1f5ed] p-4 text-sm">
+            <input type="checkbox" className="mt-1" checked={rewardsOptIn} disabled={rewardsLocked} onChange={(event) => setRewardsOptIn(event.target.checked)} />
+            <span><strong className="block text-[#46533f]">{rewardsLocked ? 'Lavender Rewards member' : 'Join Lavender Rewards'}</strong><span className="mt-1 block text-stone-600">{rewardsLocked ? 'Your membership is already active and will remain connected to this booking.' : 'Earn 1 point for every eligible service dollar paid. Joining is free, and your points stay connected to this phone number and email.'}</span></span>
           </label>
 
           <div>
@@ -398,6 +471,40 @@ export default function ConfirmBookingPage() {
       <Modal isOpen={showServiceAgreement} onClose={() => setShowServiceAgreement(false)}>
         <ServiceAgreement />
       </Modal>
+
+      {(loading || booked) && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-950/45 px-4 backdrop-blur-md"
+          role="dialog"
+          aria-modal="true"
+          aria-live="assertive"
+          aria-labelledby="booking-progress-title"
+        >
+          <div className="w-full max-w-md rounded-3xl bg-[#fbfaf7] px-7 py-10 text-center shadow-2xl md:px-10">
+            {booked ? (
+              <>
+                <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-green-600 text-white shadow-lg shadow-green-900/20">
+                  <Check size={58} strokeWidth={3} aria-hidden="true" />
+                </div>
+                <h2 id="booking-progress-title" className="mt-6 font-display text-4xl text-[#34442f]">Booked!</h2>
+                <p className="mt-3 leading-6 text-stone-600">Your appointment is confirmed. We sent the details to your email.</p>
+                <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-green-700">Taking you home…</p>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#eee8f0] text-[#66516f]">
+                  <LoaderCircle className="animate-spin" size={46} aria-hidden="true" />
+                </div>
+                <h2 id="booking-progress-title" className="mt-6 font-display text-3xl text-[#423846]">Booking your appointment…</h2>
+                <p className="mt-3 leading-6 text-stone-600">Please stay on this page while we reserve your time and send your confirmation.</p>
+                <div className="mx-auto mt-6 h-1.5 w-40 overflow-hidden rounded-full bg-[#e4dce6]">
+                  <div className="h-full w-2/3 animate-pulse rounded-full bg-[#66516f]" />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

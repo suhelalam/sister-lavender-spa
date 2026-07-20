@@ -28,6 +28,17 @@ function sanitizeAnnouncements(input) {
     .filter((item) => item.title || item.description);
 }
 
+function sanitizePromotion(input) {
+  const fallback = defaultHomeSettings.promotion;
+  return {
+    enabled: Boolean(input?.enabled), id: String(input?.id || fallback.id),
+    title: String(input?.title || fallback.title).trim(),
+    description: String(input?.description || fallback.description).trim(),
+    terms: String(input?.terms || '').trim(), startDate: String(input?.startDate || ''),
+    endDate: String(input?.endDate || ''), showOnce: input?.showOnce !== false,
+  };
+}
+
 function getFirestoreClient() {
   const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL || process.env.GOOGLE_CLIENT_EMAIL;
   const normalizePrivateKey = (rawValue) => {
@@ -97,6 +108,7 @@ function toFirestoreDocument(settings) {
     fields: {
       businessHoursJson: { stringValue: JSON.stringify(settings.businessHours) },
       announcementsJson: { stringValue: JSON.stringify(settings.announcements) },
+      promotionJson: { stringValue: JSON.stringify(settings.promotion) },
       updatedAt: { timestampValue: new Date().toISOString() },
     },
   };
@@ -111,7 +123,8 @@ function fromFirestoreDocument(document) {
     const announcements = sanitizeAnnouncements(
       JSON.parse(fields.announcementsJson?.stringValue || "[]")
     );
-    return { businessHours, announcements };
+    const promotion = sanitizePromotion(JSON.parse(fields.promotionJson?.stringValue || "{}"));
+    return { businessHours, announcements, promotion };
   } catch {
     return defaultHomeSettings;
   }
@@ -141,11 +154,12 @@ export default async function handler(req, res) {
     if (req.method === "PUT") {
       const businessHours = sanitizeBusinessHours(req.body?.businessHours);
       const announcements = sanitizeAnnouncements(req.body?.announcements);
+      const promotion = sanitizePromotion(req.body?.promotion);
 
       try {
         await firestore.projects.databases.documents.patch({
           name,
-          requestBody: toFirestoreDocument({ businessHours, announcements }),
+          requestBody: toFirestoreDocument({ businessHours, announcements, promotion }),
         });
       } catch (error) {
         if (!(error?.code === 404 || error?.status === 404)) throw error;
@@ -156,13 +170,13 @@ export default async function handler(req, res) {
           parent: `projects/${projectId}/databases/${FIRESTORE_DB}/documents`,
           collectionId: "settings",
           documentId: "homepage",
-          requestBody: toFirestoreDocument({ businessHours, announcements }),
+          requestBody: toFirestoreDocument({ businessHours, announcements, promotion }),
         });
       }
 
       return res.status(200).json({
         success: true,
-        settings: { businessHours, announcements },
+        settings: { businessHours, announcements, promotion },
       });
     }
 

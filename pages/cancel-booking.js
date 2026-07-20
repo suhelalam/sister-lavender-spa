@@ -220,11 +220,12 @@ export default function CancelBookingPage() {
   };
 
   return (
-    <div className="max-w-xl mx-auto px-6 py-16">
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-gray-900">Cancel booking</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          This link is unique to your appointment. Confirm below to cancel it.
+    <div className="checkin-shell px-4">
+      <div className="card mx-auto max-w-2xl p-6 md:p-9">
+        <p className="eyebrow">Your appointment</p>
+        <h1 className="mt-2 font-display text-4xl text-[#423846]">Manage appointment</h1>
+        <p className="mt-3 text-sm text-stone-600">
+          Use your secure link to select a new time or cancel your appointment.
         </p>
 
         {loadingDetails ? (
@@ -277,8 +278,8 @@ export default function CancelBookingPage() {
         ) : null}
 
         {bookingDetails && canReschedule ? (
-          <div className="mt-6 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-gray-800">
-            <h2 className="font-semibold text-gray-900">Change booking time</h2>
+          <div id="update" className="mt-6 scroll-mt-28 rounded-xl border border-[#ded3e0] bg-[#f8f4f9] p-5 text-sm text-gray-800">
+            <h2 className="font-display text-2xl text-[#423846]">Update appointment time</h2>
             <div className="mt-3">
               <label className="block text-xs font-medium text-gray-700">Select date</label>
               <input
@@ -286,7 +287,7 @@ export default function CancelBookingPage() {
                 value={selectedDate}
                 min={todayInBusinessTz()}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+                className="field mt-1"
               />
             </div>
 
@@ -307,8 +308,8 @@ export default function CancelBookingPage() {
                         onClick={() => setSelectedSlot(slot)}
                         className={`h-12 w-full rounded border text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
                           isSelected
-                            ? 'border-blue-500 bg-blue-100 text-blue-900'
-                            : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-100'
+                            ? 'border-[#66516f] bg-[#66516f] text-white'
+                            : 'border-stone-300 bg-white text-stone-800 hover:bg-[#eee8f0]'
                         }`}
                       >
                         {new Date(slot.startAt).toLocaleTimeString([], {
@@ -327,7 +328,7 @@ export default function CancelBookingPage() {
               type="button"
               onClick={updateBooking}
               disabled={updating || loadingAvailability || !selectedSlot?.startAt}
-              className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="button-primary mt-5"
             >
               {updating ? 'Updating...' : 'Update booking'}
             </button>
@@ -352,7 +353,7 @@ export default function CancelBookingPage() {
           </div>
         ) : null}
 
-        <div className="mt-8 flex items-center gap-3">
+        <div id="cancel" className="mt-8 flex scroll-mt-28 flex-wrap items-center gap-3 border-t border-stone-200 pt-6">
           <button
             type="button"
             onClick={cancelBooking}
@@ -363,11 +364,11 @@ export default function CancelBookingPage() {
               !canCancel ||
               result.type === 'success'
             }
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-red-700 px-5 py-2 text-sm font-bold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? 'Canceling...' : 'Cancel appointment'}
           </button>
-          <Link href="/" className="text-sm text-purple-700 underline">
+          <Link href="/" className="button-secondary">
             Back to home
           </Link>
         </div>

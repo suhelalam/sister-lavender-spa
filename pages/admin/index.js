@@ -37,6 +37,11 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Link href="/admin/customers">
+          <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition cursor-pointer border border-gray-200">
+            <div className="text-3xl mb-3">👤</div><h2 className="text-xl font-semibold mb-2">Customer CRM</h2><p className="text-gray-600">Profiles, visit history, spending, payments, and points</p>
+          </div>
+        </Link>
         <Link href="/admin/services">
           <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition cursor-pointer border border-gray-200">
             <div className="text-3xl mb-3">🛠️</div>

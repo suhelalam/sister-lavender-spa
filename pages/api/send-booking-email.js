@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import Stripe from 'stripe';
 import crypto from 'crypto';
 import { adminDb, isAdminConfigured } from '../../lib/firebaseAdmin';
+import { upsertCustomer } from '../../lib/crm';
 
 function hashCancelToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -11,6 +12,8 @@ function hashCancelToken(token) {
 function getBaseUrl(req) {
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
   if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
 
   const host = req.headers.host;
   const forwardedProto = req.headers['x-forwarded-proto'];
@@ -37,9 +40,10 @@ function buildConfirmationMail({
 }) {
   const cancelHtml = cancelUrl
     ? `
-    <p>If you need to cancel, use the secure link below:</p>
+    <p>Need to make a change? Use one of the secure options below:</p>
     <div class="cta-wrap">
-      <a class="cta-link" href="${cancelUrl}" target="_blank" rel="noopener noreferrer">Cancel appointment</a>
+      <a class="cta-link" href="${cancelUrl}#update" target="_blank" rel="noopener noreferrer">Update appointment</a>
+      <a class="cta-link cta-danger" href="${cancelUrl}#cancel" target="_blank" rel="noopener noreferrer">Cancel appointment</a>
     </div>
     <p style="font-size: 13px; color: #555;">If the button does not work, copy this URL into your browser:<br>${cancelUrl}</p>
   `
@@ -48,7 +52,7 @@ function buildConfirmationMail({
   `;
 
   const cancelText = cancelUrl
-    ? `To cancel your booking, use this secure link:\n${cancelUrl}`
+    ? `To update or cancel your booking, use this secure link:\n${cancelUrl}`
     : 'To cancel your booking, please call us at (312) 900-3131.';
 
   return {
@@ -74,6 +78,7 @@ function buildConfirmationMail({
       border-radius: 6px;
       font-weight: 600;
     }
+    .cta-danger { background: #b33a3a; margin-left: 8px; }
   </style>
 </head>
 <body>
@@ -149,6 +154,9 @@ export default async function handler(req, res) {
     partySize,
     note,
     totalFormatted,
+    customerId,
+    rewardsOptIn,
+    marketingOptIn,
   } = req.body || {};
 
   const firstName = customer?.givenName;
@@ -347,7 +355,7 @@ ${note || 'None'}
       };
 
       const response = await calendar.events.insert({
-        calendarId: 'selena@sisterlavenderspa.com',
+        calendarId: process.env.GOOGLE_CALENDAR_ID || 'selena@sisterlavenderspa.com',
         resource: event,
       });
 
@@ -361,6 +369,36 @@ ${note || 'None'}
       console.error('Error creating Google Calendar event:', error);
       throw error;
     }
+  }
+
+  async function addManagementLinksToCalendar(eventId, manageUrl) {
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      },
+      scopes: ['https://www.googleapis.com/auth/calendar'],
+    });
+    const client = await auth.getClient();
+    const calendar = google.calendar({ version: 'v3', auth: client });
+    const calendarId = process.env.GOOGLE_CALENDAR_ID || 'selena@sisterlavenderspa.com';
+    const current = await calendar.events.get({ calendarId, eventId });
+    const existingDescription = current.data.description || '';
+    const updateUrl = `${manageUrl}#update`;
+    const cancelActionUrl = `${manageUrl}#cancel`;
+    const htmlEscape = (value) => String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+    const existingDescriptionHtml = htmlEscape(existingDescription).replaceAll('\n', '<br>');
+    await calendar.events.patch({
+      calendarId,
+      eventId,
+      requestBody: {
+        description: `${existingDescriptionHtml}<br><br><strong>Appointment actions</strong><br><a href="${htmlEscape(updateUrl)}">✏️ Update appointment</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="${htmlEscape(cancelActionUrl)}">✕ Cancel appointment</a>`,
+      },
+    });
   }
 
   const notificationMail = {
@@ -402,6 +440,7 @@ Note: ${note || 'None'}
         totalFormatted: String(totalFormatted || ''),
         services: String(serviceList || ''),
         note: String(note || ''),
+        rewards_enrolled: rewardsOptIn ? 'true' : 'false',
       },
     });
   }
@@ -446,7 +485,7 @@ Note: ${note || 'None'}
     });
   }
 
-  async function saveCancelableBooking(calendarEvent) {
+  async function saveCancelableBooking(calendarEvent, crmCustomerId, rewardsEnrolled) {
     if (!adminDb) {
       throw new Error('Admin Firestore is not configured');
     }
@@ -471,12 +510,14 @@ Note: ${note || 'None'}
       totalFormatted: totalFormatted || null,
       note: note || null,
       customer: {
+        customerId: crmCustomerId || null,
         firstName: firstName || '',
         lastName: lastName || '',
         fullName: `${firstName} ${lastName}`.trim(),
         email: (email || '').trim().toLowerCase(),
         phone: phone || '',
       },
+      rewardsEnrolled: Boolean(rewardsEnrolled),
       services: normalizedServices,
       followUpEmail: {
         status: 'scheduled',
@@ -490,14 +531,40 @@ Note: ${note || 'None'}
   }
 
   try {
+    let crmCustomer = null;
+    if (isAdminConfigured) {
+      crmCustomer = await upsertCustomer(adminDb, {
+        customerId: customerId || null,
+        name: `${firstName} ${lastName}`.trim(),
+        email,
+        phone,
+        rewards: rewardsOptIn ? { enrolled: true } : undefined,
+        marketingConsent: {
+          sms: Boolean(marketingOptIn),
+          updatedAt: new Date().toISOString(),
+          source: 'online-booking',
+        },
+      });
+    }
     const calendarEvent = await addToGoogleCalendar();
     let bookingId = null;
     let cancelUrl = '';
     if (isAdminConfigured) {
       try {
-        const cancelData = await saveCancelableBooking(calendarEvent);
+        const cancelData = await saveCancelableBooking(
+          calendarEvent,
+          crmCustomer?.id,
+          rewardsOptIn || crmCustomer?.rewards?.enrolled
+        );
         bookingId = cancelData.bookingId;
         cancelUrl = `${getBaseUrl(req)}/cancel-booking?booking=${encodeURIComponent(cancelData.bookingId)}&token=${encodeURIComponent(cancelData.cancelToken)}`;
+        try {
+          await addManagementLinksToCalendar(calendarEvent.id, cancelUrl);
+        } catch (calendarLinkError) {
+          // The booking and secure management link are still valid even if
+          // Google Calendar temporarily rejects the description update.
+          console.error('Could not add management links to calendar event:', calendarLinkError);
+        }
       } catch (cancelPersistenceError) {
         console.error('Cancelable booking persistence failed:', cancelPersistenceError);
       }
@@ -521,6 +588,12 @@ Note: ${note || 'None'}
     await transporter.sendMail(confirmationMail);
 
     const stripeCustomer = await upsertStripeCustomer();
+    if (crmCustomer?.id && stripeCustomer?.id) {
+      await adminDb.collection('customers').doc(crmCustomer.id).set({
+        stripeCustomerId: stripeCustomer.id,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    }
 
     try {
       await logBookingAnalytics();

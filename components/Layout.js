@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { Menu, X, ShoppingCart } from 'lucide-react';
+import { Menu, X, ShoppingCart, MapPin, Phone } from 'lucide-react';
 import { useCart } from '../context/CartContext'; // adjust path if needed
 import { defaultBusinessHours } from '../lib/homeSettings';
 
@@ -34,13 +34,13 @@ function ClientOnlyCheckoutButton({ items, onClick }) {
 
   return (
     <Link
-      href="/services"
+      href="/select-time"
       onClick={onClick}
       className={`bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 ${
         items.length === 0 ? 'opacity-50 pointer-events-none' : ''
       }`}
     >
-      Checkout
+      Continue
     </Link>
   );
 }
@@ -54,10 +54,11 @@ export default function Layout({ children }) {
 
   const navItems = [
     { label: 'Home', href: '/' },
-    { label: 'Services', href: '/services' },
-    { label: 'Gift Card', href: '/gift-card' },
-    { label: 'Location', href: '/location' },
-    { label: 'Our Policy', href: '/our-policy' },
+    { label: 'Services & Pricing', href: '/services' },
+    { label: 'Couples', href: '/couples-services' },
+    { label: 'Rewards', href: '/membership-rewards' },
+    { label: 'Gift Cards', href: '/gift-card' },
+    { label: 'Visit', href: '/location' },
   ];
 
   useEffect(() => {
@@ -76,6 +77,20 @@ export default function Layout({ children }) {
 
     loadFooterHours();
   }, []);
+
+  useEffect(() => {
+    if (!cartOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setCartOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [cartOpen]);
 
   const formatTime = (time24) => {
     if (!time24 || !time24.includes(':')) return time24;
@@ -150,19 +165,20 @@ export default function Layout({ children }) {
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
-      <header className="bg-white shadow-md px-4 md:px-8 py-4 sticky top-0 z-50">
+      <div className="top-strip"><span>Open daily 9:30 AM–9:00 PM</span><a href="tel:+13129003131"><Phone size={13}/> (312) 900-3131</a><a href="https://maps.google.com/?q=2706+W+Chicago+Ave+Chicago+IL+60622"><MapPin size={13}/> West Town, Chicago</a></div>
+      <header className="site-header px-4 md:px-8 py-3 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Link href="/" className="text-lg font-bold hover:text-purple-600 transition">
-            Sister Lavender Spa
+          <Link href="/" className="brand-mark">
+            <span>Sister Lavender</span><small>SPA · CHICAGO</small>
           </Link>
 
           {/* Desktop Nav */}
-          <nav className="hidden md:flex space-x-6 items-center">
+          <nav className="hidden lg:flex space-x-5 items-center">
             {navItems.map(({ label, href }) => (
               <Link
                 key={href}
                 href={href}
-                className={`hover:text-purple-600 transition font-medium ${
+                className={`nav-link ${
                   (href === '/' ? pathname === '/' : pathname.startsWith(href))
                     ? 'text-purple-600 underline underline-offset-4'
                     : ''
@@ -174,10 +190,10 @@ export default function Layout({ children }) {
           </nav>
 
           {/* Desktop Book Now + Cart */}
-          <div className="hidden md:flex items-center space-x-4">
+          <div className="hidden lg:flex items-center space-x-4">
             <Link
               href="/services"
-              className="bg-purple-600 text-white px-4 py-2 rounded-full font-medium hover:bg-purple-700"
+              className="button-primary"
             >
               Book Now
             </Link>
@@ -190,7 +206,7 @@ export default function Layout({ children }) {
           </div>
 
           {/* Mobile cart + menu */}
-          <div className="md:hidden flex items-center space-x-4">
+          <div className="lg:hidden flex items-center space-x-4">
             {/* Cart Icon */}
             <ClientOnlyCartButton
               totalItems={totalItems}
@@ -206,7 +222,7 @@ export default function Layout({ children }) {
 
         {/* Mobile Nav */}
         {menuOpen && (
-          <nav className="md:hidden mt-4 px-4 space-y-4">
+          <nav className="lg:hidden mt-4 px-4 space-y-4">
             {navItems.map(({ label, href }) => (
               <Link
                 key={href}
@@ -229,63 +245,77 @@ export default function Layout({ children }) {
           </nav>
         )}
 
-        {/* Cart Sidebar */}
-        {cartOpen && (
-          <div className="fixed top-0 right-0 w-80 h-full bg-white shadow-lg p-6 z-50 flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold">Your Cart</h2>
-              <button onClick={() => setCartOpen(false)} aria-label="Close cart">
+      </header>
+
+      {cartOpen && (
+        <div className="fixed inset-0 z-[80]" role="presentation">
+          <button
+            type="button"
+            className="absolute inset-0 bg-stone-950/45 backdrop-blur-[2px]"
+            onClick={() => setCartOpen(false)}
+            aria-label="Close cart"
+          />
+          <aside
+            className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-[#fbfaf7] shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cart-title"
+          >
+            <div className="flex shrink-0 items-center justify-between border-b border-stone-200 px-5 py-5 sm:px-7">
+              <div>
+                <p className="eyebrow">Your selections</p>
+                <h2 id="cart-title" className="mt-1 text-2xl font-semibold text-[#423846]">Your Cart</h2>
+              </div>
+              <button type="button" onClick={() => setCartOpen(false)} aria-label="Close cart" className="rounded-full p-2 hover:bg-stone-100">
                 <X size={24} />
               </button>
             </div>
 
-            {items.length === 0 ? (
-              <p className="text-center text-gray-500">Your cart is empty.</p>
-            ) : (
-              <ul className="flex-grow overflow-auto space-y-4">
-                {items.map((item) => (
-                  <li key={item.id} className="flex justify-between items-center">
-                    <div>
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
-                    </div>
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="text-red-500 hover:underline text-sm"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <div className="mt-6 flex justify-between">
-              <button
-                onClick={() => clearCart()}
-                className="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300"
-                disabled={items.length === 0}
-              >
-                Clear Cart
-              </button>
-
-              {/* Client-only checkout button */}
-              <ClientOnlyCheckoutButton items={items} onClick={() => setCartOpen(false)} />
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
+              {items.length === 0 ? (
+                <div className="grid min-h-52 place-items-center text-center">
+                  <div><ShoppingCart className="mx-auto text-stone-300" size={38} /><p className="mt-3 text-stone-500">Your cart is empty.</p></div>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {items.map((item) => (
+                    <li key={item.id} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="break-words font-semibold leading-5 text-stone-800">{item.name}</p>
+                          {item.variationName && <p className="mt-1 text-sm text-stone-500">{item.variationName}</p>}
+                          <p className="mt-2 text-sm font-semibold text-[#66516f]">${((Number(item.price) || 0) / 100).toFixed(2)} × {item.quantity || 1}</p>
+                        </div>
+                        <button type="button" onClick={() => removeItem(item.id)} className="shrink-0 text-sm font-semibold text-red-600 hover:underline" aria-label={`Remove one ${item.name} from cart`}>
+                          Remove one
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-          </div>
-        )}
-      </header>
 
-      <main id="main-content" tabIndex={-1} className="page-container min-h-screen">
+            <div className="shrink-0 border-t border-stone-200 bg-white px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-7">
+              {items.length > 0 && <div className="mb-4 flex items-center justify-between text-sm"><span className="text-stone-500">Services selected</span><strong>{totalItems}</strong></div>}
+              <div className="flex items-center justify-between gap-3">
+                <button type="button" onClick={clearCart} className="button-secondary flex-1" disabled={items.length === 0}>Clear cart</button>
+                <ClientOnlyCheckoutButton items={items} onClick={() => setCartOpen(false)} />
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      <main id="main-content" tabIndex={-1} className="min-h-screen">
         {children}
       </main>
 
-      <footer className="bg-gray-100 text-gray-700 mt-12 px-6 py-10 text-sm">
+      <footer className="site-footer px-6 py-12 text-sm">
         <div className="max-w-5xl mx-auto grid gap-8 md:grid-cols-3">
           <div>
             <h4 className="font-semibold text-lg mb-2">Contact</h4>
-            <p>Email: selena@sisterlavenderspa.com</p>
-            <p>Phone: (312) 900-3131</p>
+            <p>2706 W Chicago Ave<br/>Chicago, IL 60622</p><p className="mt-2">selena@sisterlavenderspa.com<br/>(312) 900-3131</p>
           </div>
           <div>
             <h4 className="font-semibold text-lg mb-2">Business Hours</h4>

@@ -24,6 +24,7 @@ export default function StripeTerminal() {
   const [searchingCustomer, setSearchingCustomer] = useState(false);
   const [customerSearchError, setCustomerSearchError] = useState(null);
   const [searchResults, setSearchResults] = useState([]); // Multiple results from name search
+  const [redeemRewards, setRedeemRewards] = useState(false);
 
   // Track the active PI so we can cancel it
   const [activePaymentIntentId, setActivePaymentIntentId] = useState(null);
@@ -173,8 +174,16 @@ export default function StripeTerminal() {
     selectedCoupon?.discount_type === 'amount' ? (selectedCoupon.amount_off || 0) / 100 : 0;
   const discountAmount = Math.min(couponEligibleAmount, percentDiscountAmount + fixedDiscountAmount);
   const amountAfterDiscount = baseAmount - discountAmount;
+  const canRedeemRewards = Boolean(
+    selectedCustomer?.rewardsEnrolled &&
+    Number(selectedCustomer?.pointsBalance || 0) >= 500 &&
+    amountAfterDiscount >= 10
+  );
+  const rewardPointsToRedeem = redeemRewards && canRedeemRewards ? 500 : 0;
+  const rewardDiscountAmount = rewardPointsToRedeem ? 10 : 0;
+  const amountAfterRewards = Math.max(0, amountAfterDiscount - rewardDiscountAmount);
 
-  const amountAfterDiscountCents = Math.max(0, Math.round(amountAfterDiscount * 100));
+  const amountAfterDiscountCents = Math.max(0, Math.round(amountAfterRewards * 100));
   const feeAmountCents = includeFee && paymentMethod === 'card' ? Math.max(0, Math.round(amountAfterDiscountCents * 0.03)) : 0;
   const finalChargeAmount = amountAfterDiscountCents + feeAmountCents;
   const feeAmount = feeAmountCents / 100;
@@ -247,7 +256,11 @@ export default function StripeTerminal() {
 
   useEffect(() => {
     setCartPreviewShown(false);
-  }, [selectedServices, selectedReaderId, includeFee, selectedCouponId, amount, additionalCharge]);
+  }, [selectedServices, selectedReaderId, includeFee, selectedCouponId, amount, additionalCharge, redeemRewards]);
+
+  useEffect(() => {
+    if (!canRedeemRewards) setRedeemRewards(false);
+  }, [canRedeemRewards]);
 
   const clearTerminalUiState = () => {
     setActivePaymentIntentId(null);
@@ -310,8 +323,8 @@ export default function StripeTerminal() {
     setIncludeFee(true);
     setSelectedCouponId('');
     setCartPreviewShown(false);
-    setReceipt(null);
     setSearchResults([]);
+    setRedeemRewards(false);
   };
 
   // ----- Search for customer by email, phone, or name -----
@@ -366,9 +379,12 @@ export default function StripeTerminal() {
           // Single match found
           setSelectedCustomer({
             id: data.customer.id,
+            crmCustomerId: data.customer.crmCustomerId,
             email: data.customer.email,
             phone: data.customer.phone,
             name: data.customer.name || 'Stripe Customer',
+            rewardsEnrolled: data.customer.rewardsEnrolled,
+            pointsBalance: data.customer.pointsBalance,
           });
           setSearchResults([]);
           setCustomerSearchError(null);
@@ -475,6 +491,7 @@ export default function StripeTerminal() {
   // ----- Handle cash payment -----
   const handleCashPayment = async () => {
     setPaymentStatus(null);
+    setReceipt(null);
     if (baseAmount <= 0) {
       alert('Please enter a valid amount');
       return;
@@ -517,10 +534,13 @@ export default function StripeTerminal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: finalChargeAmount,
+          amount: displayAmount,
           services: servicesForReceipt,
           couponCode: selectedCouponPayload?.code || '',
           discountAmount: discountAmount,
+          customerId: selectedCustomer?.crmCustomerId || null,
+          rewardPointsToRedeem,
+          rewardDiscountAmount,
           stripeCustomerId: selectedCustomer?.id || null,
           customerEmail: selectedCustomer?.email || null,
           customerPhone: selectedCustomer?.phone || null,
@@ -538,7 +558,9 @@ export default function StripeTerminal() {
         amount: displayAmount,
         services: servicesForReceipt,
         discountAmount: discountAmount,
-        subtotal: amountAfterDiscount,
+        rewardDiscountAmount,
+        rewardPointsRedeemed: rewardPointsToRedeem,
+        subtotal: amountAfterRewards,
         customerName: selectedCustomer?.name || null,
         customerEmail: selectedCustomer?.email || null,
       });
@@ -560,6 +582,7 @@ export default function StripeTerminal() {
   // ----- Server-driven payment -----
   const handlePayment = async () => {
     setPaymentStatus(null);
+    setReceipt(null);
     if (!selectedReaderId) {
       alert('Please select a reader first');
       return;
@@ -648,6 +671,7 @@ export default function StripeTerminal() {
           customer_name: selectedCustomer?.name || '',
           customer_email: selectedCustomer?.email || '',
           customer_phone: selectedCustomer?.phone || '',
+          customer_id: selectedCustomer?.crmCustomerId || '',
           coupon_code: selectedCouponPayload?.code || '',
           coupon_id: selectedCouponPayload?.coupon_id || '',
           promotion_code_id: selectedCouponPayload?.promotion_code_id || '',
@@ -658,6 +682,8 @@ export default function StripeTerminal() {
           coupon_currency: selectedCouponPayload?.currency || '',
           coupon_discount_display: selectedCouponPayload?.discount_display || '',
           discount_amount_cents: Math.max(0, Math.round(discountAmount * 100)),
+          reward_points_to_redeem: rewardPointsToRedeem,
+          reward_discount_amount_cents: Math.round(rewardDiscountAmount * 100),
           processing_fee_amount_cents: Math.max(0, Math.round(feeAmountCents || 0)),
         }),
       });
@@ -693,17 +719,24 @@ export default function StripeTerminal() {
 
       if (paymentResult === 'succeeded') {
         try {
-          await fetch('/api/finalize-terminal-payment', {
+          const finalizeResponse = await fetch('/api/finalize-terminal-payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ payment_intent_id: piData.payment_intent_id }),
           });
+          const finalizeData = await finalizeResponse.json();
+          if (!finalizeResponse.ok) throw new Error(finalizeData.error || 'Could not record payment rewards.');
+          if (finalizeData.rewards && selectedCustomer) {
+            setSelectedCustomer((customer) => ({ ...customer, pointsBalance: finalizeData.rewards.pointsBalance }));
+            setPaymentStatus({ type: 'success', text: `Payment successful. ${finalizeData.rewards.pointsEarned} points earned${finalizeData.rewards.pointsRedeemed ? ` and ${finalizeData.rewards.pointsRedeemed} points redeemed` : ''}.` });
+          }
         } catch (finalizeError) {
           console.warn('Failed to finalize terminal payment breakdown:', finalizeError);
+          setPaymentStatus({ type: 'error', text: `Payment succeeded, but rewards need attention: ${finalizeError.message}` });
         }
 
         await clearReaderDisplay(selectedReaderId);
-        setPaymentStatus({ type: 'success', text: 'Payment successful.' });
+        if (!selectedCustomer) setPaymentStatus({ type: 'success', text: 'Payment successful.' });
         clearTerminalUiState();
         resetForm();
         return;
@@ -770,6 +803,12 @@ export default function StripeTerminal() {
               <div className="flex justify-between text-green-600">
                 <span>Discount</span>
                 <span>-${receipt.discountAmount.toFixed(2)}</span>
+              </div>
+            )}
+            {receipt.rewardDiscountAmount > 0 && (
+              <div className="flex justify-between text-green-700">
+                <span>Rewards ({receipt.rewardPointsRedeemed} points)</span>
+                <span>-${receipt.rewardDiscountAmount.toFixed(2)}</span>
               </div>
             )}
             <hr className="my-2" />
@@ -850,6 +889,7 @@ export default function StripeTerminal() {
               <button
                 onClick={() => {
                   setSelectedCustomer(null);
+                  setRedeemRewards(false);
                   setCustomerSearchQuery('');
                   setSearchResults([]);
                 }}
@@ -871,13 +911,16 @@ export default function StripeTerminal() {
               <p className="text-xs font-semibold text-yellow-800">Multiple customers found. Select one:</p>
               {searchResults.map((customer) => (
                 <button
-                  key={customer.id}
+                  key={customer.crmCustomerId || customer.id}
                   onClick={() => {
                     setSelectedCustomer({
                       id: customer.id,
+                      crmCustomerId: customer.crmCustomerId,
                       email: customer.email,
                       phone: customer.phone,
                       name: customer.name || 'Stripe Customer',
+                      rewardsEnrolled: customer.rewardsEnrolled,
+                      pointsBalance: customer.pointsBalance,
                     });
                     setSearchResults([]);
                   }}
@@ -896,6 +939,19 @@ export default function StripeTerminal() {
             <div className="p-3 bg-green-100 border border-green-300 rounded text-sm">
               <p className="font-semibold text-green-800">{selectedCustomer.name}</p>
               <p className="text-green-700 text-xs">{selectedCustomer.email || selectedCustomer.phone}</p>
+              <div className="mt-3 border-t border-green-300 pt-3">
+                {selectedCustomer.rewardsEnrolled ? (
+                  <>
+                    <div className="flex items-center justify-between"><span className="font-medium text-green-900">Lavender Rewards</span><strong className="text-green-900">{Number(selectedCustomer.pointsBalance || 0)} points</strong></div>
+                    {Number(selectedCustomer.pointsBalance || 0) >= 500 ? (
+                      <label className={`mt-3 flex items-center gap-2 rounded-lg border p-3 ${amountAfterDiscount >= 10 ? 'cursor-pointer border-green-400 bg-white' : 'border-stone-200 bg-stone-50 text-stone-500'}`}>
+                        <input type="checkbox" checked={redeemRewards} disabled={amountAfterDiscount < 10 || isLoading} onChange={(event) => setRedeemRewards(event.target.checked)} />
+                        <span><strong className="block">Redeem 500 points</strong><span className="text-xs">Apply $10.00 off this charge</span></span>
+                      </label>
+                    ) : <p className="mt-2 text-xs text-green-800">{500 - Number(selectedCustomer.pointsBalance || 0)} more points needed for a $10 reward.</p>}
+                  </>
+                ) : <p className="text-xs text-green-800">This customer is not enrolled in rewards.</p>}
+              </div>
             </div>
           )}
         </div>
@@ -1112,6 +1168,12 @@ export default function StripeTerminal() {
               </div>
             )}
 
+            {rewardDiscountAmount > 0 && (
+              <div className="flex justify-between text-sm font-semibold text-green-700">
+                <span>Rewards (500 points):</span><span>-$10.00</span>
+              </div>
+            )}
+
             {selectedCoupon && hasCouponProductRestrictions && selectedServices.length > 0 && (
               <div className="flex justify-between text-xs text-blue-700">
                 <span>Coupon-eligible services:</span>
@@ -1125,10 +1187,10 @@ export default function StripeTerminal() {
               </div>
             )}
 
-            {(discountAmount > 0 || includeFee) && (
+            {(discountAmount > 0 || rewardDiscountAmount > 0 || includeFee) && (
               <div className="flex justify-between text-sm font-medium border-t border-blue-200 pt-1 mt-1">
                 <span>After discount:</span>
-                <span>${amountAfterDiscount.toFixed(2)}</span>
+                <span>${amountAfterRewards.toFixed(2)}</span>
               </div>
             )}
 

@@ -1,119 +1,19 @@
-import Link from 'next/link';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
-import { useServices } from '../context/ServicesContext';
-import ServiceCard from '../components/ServiceCard';
-import { defaultAnnouncements } from '../lib/homeSettings';
+import Link from 'next/link';
+import { ArrowRight, Gift, Heart, MapPin, Phone, Sparkles, Star, Users } from 'lucide-react';
+import PromotionPopup from '../components/PromotionPopup';
 
-function HomeContent() {
-  const { activeServices: services } = useServices();
-  const [announcements, setAnnouncements] = useState([]);
-  const [announcementsLoading, setAnnouncementsLoading] = useState(true);
-
-  const featuredServices = services.slice(1, 3); // or however you want
-
-  useEffect(() => {
-    const loadAnnouncements = async () => {
-      try {
-        const response = await fetch('/api/admin/settings');
-        if (response.ok) {
-          const payload = await response.json();
-          if (Array.isArray(payload?.settings?.announcements)) {
-            setAnnouncements(payload.settings.announcements);
-            return;
-          }
-        }
-        setAnnouncements(defaultAnnouncements);
-      } catch (error) {
-        console.error('Failed to load announcements:', error);
-        setAnnouncements(defaultAnnouncements);
-      } finally {
-        setAnnouncementsLoading(false);
-      }
-    };
-
-    loadAnnouncements();
-  }, []);
-
-  return (
-    <>
-      <div className="min-h-screen flex flex-col items-center justify-center text-center p-6 bg-purple-50">
-        {/* Logo */}
-        <Image
-          src="/logo.png"
-          alt="Sister Lavender Spa Logo"
-          width={128}
-          height={128}
-          className="mb-6 h-auto w-32"
-          priority
-        />
-
-        <h1 className="text-5xl font-bold mb-4 text-purple-700">
-          Experience Head Spa, Massage, and Nail Services at Sister Lavender Spa
-        </h1>
-        <p className="text-lg text-gray-700 mb-6 max-w-xl">
-          ✨ Relaxation and Beauty from Scalp to Sole ✨
-        </p>
-
-        <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0 mb-8">
-          <Link href="/services" className="px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition">Book Appointment</Link>
-          <Link href="/service-agreement" className="px-6 py-3 border border-purple-600 text-purple-600 rounded hover:bg-purple-100 transition">Service Agreement</Link>
-          <Link href="/gift-card" className="px-6 py-3 border border-yellow-500 text-yellow-700 rounded hover:bg-yellow-100 transition">Buy Gift Card</Link>
-        </div>
-
-        <div className="text-left max-w-2xl space-y-6">
-          <section className="mb-10">
-            <h2 className="text-2xl font-semibold text-purple-800 mb-4">📰 Latest News & Announcements</h2>
-            {announcementsLoading ? (
-              <div className="h-24 border border-purple-200 rounded p-4 bg-white animate-pulse" />
-            ) : (
-              <ul className="space-y-6">
-                {announcements.map(({ id, title, date, description, note }) => (
-                  <li key={id} className="border border-purple-300 rounded p-4 bg-white shadow-sm">
-                    <h3 className="text-xl font-bold text-purple-700">{title}</h3>
-                    <p className="text-sm text-gray-500 mb-2">{date}</p>
-                    <p>{description}</p>
-                    {note ? <p className="text-sm text-gray-600">{note}</p> : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-purple-800 mb-2">
-              🌟 Featured Services
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-              {featuredServices.map((service) => (
-                <ServiceCard key={service.id} service={service} />
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-purple-800 mb-2">🌿 Our Services</h2>
-            <p className="text-gray-700">From massages to scalp therapy...</p>
-            <Link href="/AllServices" className="text-purple-600 underline hover:text-purple-800 inline-block mt-2">Explore all services →</Link>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-purple-800 mb-2">🎁 Gift the Experience</h2>
-            <p className="text-gray-700">Our gift cards let your loved ones choose their moment of relaxation.</p>
-            <Link href="/gift-card" className="text-purple-600 underline hover:text-purple-800 inline-block mt-2">Learn more →</Link>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-purple-800 mb-2">📍 Visit Us</h2>
-            <p className="text-gray-700">2706 W Chicago Ave, Chicago, IL 60622</p>
-          </section>
-        </div>
-      </div>
-    </>
-  );
-}
-
-export default function Home() {
-  return <HomeContent />;
-}
+const features=[
+  {title:'Chicago Head Spa',text:'Scalp care, steam, cleansing, massage, and deep quiet in one restorative ritual.',image:'/images/head.jpg',href:'/services/head-spa'},
+  {title:'Massage & Bodywork',text:'Relaxation, deep tissue, hot stone, cupping, and thoughtful combinations.',image:'/images/bodyMassage.jpg',href:'/services/body-massage'},
+  {title:'Nails & Foot Care',text:'Meticulous manicures, pedicures, and soothing care from fingertips to soles.',image:'/images/manicure.jpg',href:'/services/manicure'},
+];
+export default function Home(){return <><PromotionPopup/><div className="home-page">
+  <section className="hero"><div className="hero-copy"><p className="eyebrow">A modern sanctuary in West Town</p><h1>Head Spa, Massage, Couples Services & Nails in Chicago.</h1><p className="hero-lead">Unhurried care from scalp to sole, designed around how you want to feel when you leave.</p><div className="flex flex-wrap gap-3"><Link className="button-primary" href="/services">Book now <ArrowRight size={17}/></Link><a className="button-secondary" href="tel:+13129003131"><Phone size={17}/> Call now</a></div><div className="hero-trust"><span><Star size={16} fill="currentColor"/> Loved by Chicago guests</span><span><MapPin size={16}/> 2706 W Chicago Ave</span></div></div><div className="hero-image"><Image src="/images/Firefly_Full-body spa ritual scene combining head and body massage. A tranquil environment wi 864039.jpg" alt="Relaxing head and body spa ritual at Sister Lavender Spa" fill priority sizes="(max-width: 900px) 100vw, 50vw"/></div></section>
+  <section className="quick-actions"><Link href="/services"><Sparkles/>Book an appointment</Link><Link href="/gift-card"><Gift/>Buy a gift card</Link><Link href="/check-in"><Heart/>Guest check-in</Link><a href="https://maps.google.com/?q=2706+W+Chicago+Ave+Chicago+IL+60622" target="_blank" rel="noreferrer"><MapPin/>Directions</a></section>
+  <section className="section"><div className="section-heading"><div><p className="eyebrow">Choose your ritual</p><h2>Care for every kind of day.</h2></div><Link href="/services">View services & pricing <ArrowRight size={16}/></Link></div><div className="feature-grid">{features.map(f=><article className="service-feature" key={f.title}><div className="service-feature-image"><Image src={f.image} alt={`${f.title} at Sister Lavender Spa`} fill sizes="(max-width: 768px) 100vw, 33vw"/></div><div className="p-5"><h3>{f.title}</h3><p>{f.text}</p><Link href={f.href}>Explore service <ArrowRight size={15}/></Link></div></article>)}</div></section>
+  <section className="couples-section"><div><p className="eyebrow text-white/70">Better together</p><h2>Make space for two.</h2><p>Couples head spa and massage experiences let you slow down side by side—perfect for anniversaries, date days, and meaningful gifts.</p><div className="mt-6 flex flex-wrap gap-3"><Link href="/couples-services" className="button-light">Couples services</Link><Link href="/group-events" className="button-ghost-light"><Users size={17}/> Group events</Link></div></div></section>
+  <section className="section rewards-band"><div><p className="eyebrow">Lavender Rewards</p><h2>Your self-care should give something back.</h2><p>Earn 1 point for every eligible service dollar. Redeem 500 points for $10 off.</p><Link href="/membership-rewards" className="button-secondary mt-5">Explore rewards <ArrowRight size={16}/></Link></div><div className="reward-orb"><b>500</b><span>points = $10 off</span></div></section>
+  <section className="section"><div className="section-heading"><div><p className="eyebrow">Guest notes</p><h2>A little more relaxed than when they arrived.</h2></div></div><div className="review-grid">{['The head spa was incredibly relaxing and every detail felt thoughtful.','A beautiful couples experience. We felt cared for from start to finish.','Wonderful massage, kind staff, and such a calm space.'].map((r,i)=><blockquote key={r}><div className="stars">★★★★★</div><p>“{r}”</p><footer>Google guest review</footer></blockquote>)}</div><div className="mt-6 flex gap-4"><a className="text-link" href="https://www.google.com/search?q=Sister+Lavender+Spa+Chicago+reviews" target="_blank" rel="noreferrer">View more reviews</a><a className="text-link" href="https://www.google.com/search?q=Sister+Lavender+Spa+Chicago" target="_blank" rel="noreferrer">Leave a review</a></div></section>
+  <section className="final-cta"><p className="eyebrow">Open daily · 9:30 AM–9:00 PM</p><h2>Your quiet hour is waiting.</h2><div className="mt-6 flex flex-wrap justify-center gap-3"><Link href="/services" className="button-light">Book now</Link><Link href="/gift-card" className="button-ghost-light">Gift the experience</Link></div></section>
+  </div></>}

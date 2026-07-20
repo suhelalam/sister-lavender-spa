@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { adminDb, isAdminConfigured } from '../../lib/firebaseAdmin';
+import { createVisit, findCustomer, normalizeEmail, normalizePhone, recordPayment, upsertCustomer } from '../../lib/crm';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -13,6 +14,36 @@ export default async function handler(req, res) {
     }
 
     try {
+      const attachCrm = async (stripeCustomer) => {
+        if (!isAdminConfigured || !adminDb) return { crmCustomerId: null, rewardsEnrolled: false, pointsBalance: 0 };
+        const match = await findCustomer(adminDb, { phone: stripeCustomer.phone, email: stripeCustomer.email });
+        const crmCustomer = match?.exists
+          ? { id: match.id, ...match.data() }
+          : await upsertCustomer(adminDb, { name: stripeCustomer.name, phone: stripeCustomer.phone, email: stripeCustomer.email, stripeCustomerId: stripeCustomer.id });
+        return { crmCustomerId: crmCustomer.id, rewardsEnrolled: Boolean(crmCustomer.rewards?.enrolled), pointsBalance: Number(crmCustomer.pointsBalance || 0) };
+      };
+      if (isAdminConfigured && adminDb) {
+        let crmQuery = null;
+        if (email) crmQuery = adminDb.collection('customers').where('emailNormalized', '==', normalizeEmail(email)).limit(10);
+        else if (phone) crmQuery = adminDb.collection('customers').where('phoneNormalized', '==', normalizePhone(phone)).limit(10);
+        else if (name) crmQuery = adminDb.collection('customers').where('searchTokens', 'array-contains', String(name).trim().toLowerCase()).limit(10);
+        const crmMatches = crmQuery ? await crmQuery.get() : null;
+        if (crmMatches && !crmMatches.empty) {
+          const customers = crmMatches.docs.map((doc) => {
+            const customer = doc.data();
+            return {
+              id: customer.stripeCustomerId || null,
+              crmCustomerId: doc.id,
+              email: customer.email || '', phone: customer.phone || '', name: customer.name || 'Customer',
+              rewardsEnrolled: Boolean(customer.rewards?.enrolled),
+              pointsBalance: Number(customer.pointsBalance || 0),
+            };
+          });
+          return res.status(200).json(customers.length === 1
+            ? { customerFound: true, multipleMatches: false, customer: customers[0] }
+            : { customerFound: true, multipleMatches: true, customers });
+        }
+      }
       let stripeCustomer = null;
 
       // Search Stripe customers by email (highest priority)
@@ -68,15 +99,14 @@ export default async function handler(req, res) {
         if (searchResults.data && searchResults.data.length > 0) {
           // If multiple results, return all of them so user can pick
           if (searchResults.data.length > 1) {
+            const customers = await Promise.all(searchResults.data.map(async (c) => ({
+              id: c.id, email: c.email, name: c.name, phone: c.phone,
+              ...(await attachCrm(c)),
+            })));
             return res.status(200).json({
               customerFound: true,
               multipleMatches: true,
-              customers: searchResults.data.map((c) => ({
-                id: c.id,
-                email: c.email,
-                name: c.name,
-                phone: c.phone,
-              })),
+              customers,
             });
           }
           stripeCustomer = searchResults.data[0];
@@ -84,6 +114,7 @@ export default async function handler(req, res) {
       }
 
       if (stripeCustomer) {
+        const crm = await attachCrm(stripeCustomer);
         return res.status(200).json({
           customerFound: true,
           multipleMatches: false,
@@ -93,6 +124,7 @@ export default async function handler(req, res) {
             name: stripeCustomer.name,
             phone: stripeCustomer.phone,
             metadata: stripeCustomer.metadata,
+            ...crm,
           },
         });
       } else {
@@ -130,10 +162,24 @@ export default async function handler(req, res) {
       customerPhone,
       customerName,
       stripeCustomerId,
+      customerId,
+      rewardPointsToRedeem,
+      rewardDiscountAmount,
     } = req.body;
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Invalid amount' });
+    }
+    const requestedRewardPoints = Math.max(0, Math.round(Number(rewardPointsToRedeem || 0)));
+    const requestedRewardDiscount = Math.max(0, Number(rewardDiscountAmount || 0));
+    if (requestedRewardPoints > 0) {
+      if (requestedRewardPoints !== 500 || requestedRewardDiscount !== 10 || !customerId) {
+        return res.status(400).json({ error: 'Invalid rewards redemption.' });
+      }
+      const rewardCustomer = await adminDb.collection('customers').doc(String(customerId)).get();
+      if (!rewardCustomer.exists || !rewardCustomer.data()?.rewards?.enrolled || Number(rewardCustomer.data()?.pointsBalance || 0) < 500) {
+        return res.status(409).json({ error: 'Customer does not have enough points to redeem this reward.' });
+      }
     }
 
     const safeStripeCustomerId = String(stripeCustomerId || '').trim() || null;
@@ -165,6 +211,7 @@ export default async function handler(req, res) {
     const receiptNumber = `CASH-${Date.now()}`;
     const timestamp = new Date().toISOString();
 
+    let cashPaymentId = receiptNumber;
     // Save cash payment record to Firebase for record-keeping
     try {
       const paymentDoc = {
@@ -173,6 +220,8 @@ export default async function handler(req, res) {
         services: services || [],
         couponCode: couponCode || '',
         discountAmount: discountAmount || 0,
+        rewardPointsRedeemed: Number(rewardPointsToRedeem || 0),
+        rewardDiscountAmount: Number(rewardDiscountAmount || 0),
         receiptNumber: receiptNumber,
         timestamp: timestamp,
         createdAt: new Date(),
@@ -188,6 +237,7 @@ export default async function handler(req, res) {
       };
 
       const docRef = await adminDb.collection('cashPayments').add(paymentDoc);
+      cashPaymentId = docRef.id;
 
       // If customer info provided, also update a customer spending summary
       if (safeStripeCustomerId || resolvedCustomerEmail || resolvedCustomerPhone) {
@@ -238,6 +288,41 @@ export default async function handler(req, res) {
     } catch (firebaseError) {
       console.warn('Failed to save cash payment to Firebase:', firebaseError);
       // Continue even if Firebase save fails - receipt generation is still valid
+    }
+
+    if (resolvedCustomerEmail || resolvedCustomerPhone) {
+      try {
+        const existingCustomer = customerId
+          ? await adminDb.collection('customers').doc(String(customerId)).get()
+          : await findCustomer(adminDb, { phone: resolvedCustomerPhone, email: resolvedCustomerEmail });
+        const customer = await upsertCustomer(adminDb, {
+          customerId: existingCustomer?.exists ? existingCustomer.id : null,
+          name: resolvedCustomerName || '', phone: resolvedCustomerPhone || '',
+          email: resolvedCustomerEmail || '', stripeCustomerId: safeStripeCustomerId,
+        });
+        const openVisits = await adminDb.collection('visits').where('customerId', '==', customer.id).limit(20).get();
+        let visit = openVisits.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+          .filter((item) => item.paymentStatus !== 'paid')
+          .sort((a, b) => String(b.checkedInAt || '').localeCompare(String(a.checkedInAt || '')))[0];
+        if (!visit) {
+          visit = await createVisit(adminDb, customer, {
+            status: 'completed',
+            services: (services || []).map((item) => ({ name: item.name, amount: item.amount, quantity: item.quantity })),
+            serviceTotalCents: Math.round(Number(amount) * 100),
+          });
+        }
+        await recordPayment(adminDb, {
+          customerId: customer.id, visitId: visit.id,
+          externalPaymentId: `cash_${cashPaymentId}`, provider: 'cash', method: 'cash',
+          status: 'succeeded', amountCents: Math.round(Number(amount) * 100),
+          eligibleAmountCents: Math.round(Number(amount) * 100),
+          discountCents: Math.round((Number(discountAmount || 0) + Number(rewardDiscountAmount || 0)) * 100),
+          pointsToRedeem: Number(rewardPointsToRedeem || 0),
+          rewardDiscountCents: Math.round(Number(rewardDiscountAmount || 0) * 100),
+        });
+      } catch (crmError) {
+        console.error('Cash payment CRM recording failed:', crmError);
+      }
     }
 
     return res.status(200).json({

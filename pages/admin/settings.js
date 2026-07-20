@@ -11,6 +11,7 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [businessHours, setBusinessHours] = useState(defaultHomeSettings.businessHours);
   const [announcements, setAnnouncements] = useState(defaultHomeSettings.announcements);
+  const [promotion, setPromotion] = useState(defaultHomeSettings.promotion);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -35,6 +36,7 @@ export default function AdminSettingsPage() {
         const payload = await response.json();
         setBusinessHours(payload?.settings?.businessHours || defaultHomeSettings.businessHours);
         setAnnouncements(payload?.settings?.announcements || defaultHomeSettings.announcements);
+        setPromotion(payload?.settings?.promotion || defaultHomeSettings.promotion);
       } catch (error) {
         console.error("Failed to load settings:", error);
         alert(`Failed to load settings: ${error.message || String(error)}`);
@@ -81,7 +83,7 @@ export default function AdminSettingsPage() {
       const response = await fetch("/api/admin/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessHours, announcements }),
+        body: JSON.stringify({ businessHours, announcements, promotion }),
       });
 
       if (!response.ok) throw new Error(await response.text());
@@ -148,6 +150,18 @@ export default function AdminSettingsPage() {
                 </label>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+          <div className="flex items-center justify-between gap-4"><div><h2 className="text-xl font-semibold">Promotion Pop-Up</h2><p className="text-sm text-gray-500">Schedule the offer shown to public-site visitors.</p></div><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={promotion.enabled} onChange={(e)=>setPromotion(p=>({...p,enabled:e.target.checked}))}/> Enabled</label></div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label><span className="label">Title</span><input className="field" value={promotion.title} onChange={(e)=>setPromotion(p=>({...p,title:e.target.value}))}/></label>
+            <label><span className="label">Description</span><input className="field" value={promotion.description} onChange={(e)=>setPromotion(p=>({...p,description:e.target.value}))}/></label>
+            <label><span className="label">Start date</span><input type="date" className="field" value={promotion.startDate} onChange={(e)=>setPromotion(p=>({...p,startDate:e.target.value}))}/></label>
+            <label><span className="label">End date</span><input type="date" className="field" value={promotion.endDate} onChange={(e)=>setPromotion(p=>({...p,endDate:e.target.value}))}/></label>
+            <label className="md:col-span-2"><span className="label">Terms</span><textarea className="field" rows={2} value={promotion.terms} onChange={(e)=>setPromotion(p=>({...p,terms:e.target.value}))}/></label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={promotion.showOnce} onChange={(e)=>setPromotion(p=>({...p,showOnce:e.target.checked}))}/> Show only once per visitor</label>
           </div>
         </section>
 
@@ -221,4 +235,3 @@ export default function AdminSettingsPage() {
     </div>
   );
 }
-
