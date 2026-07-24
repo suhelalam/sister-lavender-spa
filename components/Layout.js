@@ -51,6 +51,7 @@ export default function Layout({ children }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [footerHours, setFooterHours] = useState(defaultBusinessHours);
   const { items, totalItems, removeItem, clearCart } = useCart();
+  const isCheckInKiosk = pathname === '/check-in' || pathname === '/CheckInPage';
 
   const navItems = [
     { label: 'Home', href: '/' },
@@ -159,6 +160,10 @@ export default function Layout({ children }) {
   };
 
   const groupedFooterHours = groupHoursForFooter(footerHours);
+
+  if (isCheckInKiosk) {
+    return <main id="main-content">{children}</main>;
+  }
 
   return (
     <>
