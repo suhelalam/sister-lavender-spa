@@ -534,7 +534,7 @@ export default function StripeTerminal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: displayAmount,
+          amountCents: finalChargeAmount,
           services: servicesForReceipt,
           couponCode: selectedCouponPayload?.code || '',
           discountAmount: discountAmount,
@@ -565,7 +565,10 @@ export default function StripeTerminal() {
         customerEmail: selectedCustomer?.email || null,
       });
 
-      setPaymentStatus({ type: 'success', text: 'Cash payment registered. Receipt generated.' });
+      const pointsMessage = data.rewards?.pointsEarned
+        ? ` ${data.rewards.pointsEarned} points earned.`
+        : '';
+      setPaymentStatus({ type: 'success', text: `Cash payment registered. Receipt generated.${pointsMessage}` });
       resetForm();
       setPaymentMethod('card'); // Reset to card for next transaction
       setSelectedCustomer(null); // Clear customer selection

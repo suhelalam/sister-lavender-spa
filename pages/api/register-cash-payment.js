@@ -155,6 +155,7 @@ export default async function handler(req, res) {
   try {
     const {
       amount,
+      amountCents: requestedAmountCents,
       services,
       couponCode,
       discountAmount,
@@ -167,9 +168,15 @@ export default async function handler(req, res) {
       rewardDiscountAmount,
     } = req.body;
 
-    if (!amount || amount <= 0) {
+    // Cash totals use the same integer-cent contract as card payments. Keep
+    // accepting the former dollar `amount` field for older terminal clients.
+    const amountCents = requestedAmountCents == null
+      ? Math.round(Number(amount || 0) * 100)
+      : Math.round(Number(requestedAmountCents));
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
       return res.status(400).json({ error: 'Invalid amount' });
     }
+    const amountDollars = amountCents / 100;
     const requestedRewardPoints = Math.max(0, Math.round(Number(rewardPointsToRedeem || 0)));
     const requestedRewardDiscount = Math.max(0, Number(rewardDiscountAmount || 0));
     if (requestedRewardPoints > 0) {
@@ -216,7 +223,9 @@ export default async function handler(req, res) {
     try {
       const paymentDoc = {
         type: 'cash',
-        amount: amount,
+        amount: amountCents,
+        amountCents,
+        amountDollars,
         services: services || [],
         couponCode: couponCode || '',
         discountAmount: discountAmount || 0,
@@ -260,7 +269,7 @@ export default async function handler(req, res) {
             // Update existing record
             const existingDoc = snapshots.docs[0];
             await existingDoc.ref.update({
-              totalSpent: (existingDoc.data().totalSpent || 0) + amount,
+              totalSpent: (existingDoc.data().totalSpent || 0) + amountDollars,
               totalTransactions: (existingDoc.data().totalTransactions || 0) + 1,
               lastPaymentDate: timestamp,
               paymentIds: [...(existingDoc.data().paymentIds || []), docRef.id],
@@ -272,7 +281,7 @@ export default async function handler(req, res) {
               email: searchEmail,
               phone: resolvedCustomerPhone,
               name: resolvedCustomerName,
-              totalSpent: amount,
+              totalSpent: amountDollars,
               totalTransactions: 1,
               lastPaymentDate: timestamp,
               firstPaymentDate: timestamp,
@@ -290,7 +299,8 @@ export default async function handler(req, res) {
       // Continue even if Firebase save fails - receipt generation is still valid
     }
 
-    if (resolvedCustomerEmail || resolvedCustomerPhone) {
+    let rewards = null;
+    if (customerId || resolvedCustomerEmail || resolvedCustomerPhone) {
       try {
         const existingCustomer = customerId
           ? await adminDb.collection('customers').doc(String(customerId)).get()
@@ -308,18 +318,24 @@ export default async function handler(req, res) {
           visit = await createVisit(adminDb, customer, {
             status: 'completed',
             services: (services || []).map((item) => ({ name: item.name, amount: item.amount, quantity: item.quantity })),
-            serviceTotalCents: Math.round(Number(amount) * 100),
+            serviceTotalCents: amountCents,
           });
         }
-        await recordPayment(adminDb, {
+        const payment = await recordPayment(adminDb, {
           customerId: customer.id, visitId: visit.id,
           externalPaymentId: `cash_${cashPaymentId}`, provider: 'cash', method: 'cash',
-          status: 'succeeded', amountCents: Math.round(Number(amount) * 100),
-          eligibleAmountCents: Math.round(Number(amount) * 100),
+          status: 'succeeded', amountCents,
+          eligibleAmountCents: amountCents,
           discountCents: Math.round((Number(discountAmount || 0) + Number(rewardDiscountAmount || 0)) * 100),
           pointsToRedeem: Number(rewardPointsToRedeem || 0),
           rewardDiscountCents: Math.round(Number(rewardDiscountAmount || 0) * 100),
         });
+        const updatedCustomer = await adminDb.collection('customers').doc(customer.id).get();
+        rewards = {
+          pointsEarned: Number(payment.pointsEarned || 0),
+          pointsRedeemed: Number(payment.pointsRedeemed || 0),
+          pointsBalance: Number(updatedCustomer.data()?.pointsBalance || 0),
+        };
       } catch (crmError) {
         console.error('Cash payment CRM recording failed:', crmError);
       }
@@ -329,10 +345,12 @@ export default async function handler(req, res) {
       ok: true,
       receiptNumber: receiptNumber,
       timestamp: timestamp,
-      amount: amount,
+      amount: amountDollars,
+      amountCents,
       services: services,
       discountAmount: discountAmount,
-      customerTracked: !!(safeStripeCustomerId || resolvedCustomerEmail || resolvedCustomerPhone),
+      customerTracked: !!(customerId || safeStripeCustomerId || resolvedCustomerEmail || resolvedCustomerPhone),
+      rewards,
     });
   } catch (error) {
     console.error('Cash payment registration failed:', error);

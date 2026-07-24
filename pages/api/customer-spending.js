@@ -48,6 +48,9 @@ export default async function handler(req, res) {
       id: doc.id,
       ...doc.data(),
     }));
+    const cashAmountCents = (payment) => payment.amountCents != null
+      ? Number(payment.amountCents || 0)
+      : Number(payment.amount || 0) * 100;
 
     // Get all card payments from bookingAnalytics
     const bookingsQuery = normalizedEmail
@@ -75,7 +78,7 @@ export default async function handler(req, res) {
       cashPayments: payments,
       bookedServices: bookings,
       paymentSummary: {
-        totalFromCash: payments.reduce((sum, p) => sum + (p.amount || 0), 0) / 100,
+        totalFromCash: payments.reduce((sum, payment) => sum + cashAmountCents(payment), 0) / 100,
         totalFromBookings: bookings.reduce((sum, b) => sum + (b.totalPaid || 0), 0) / 100,
         totalPayments: payments.length + bookings.length,
       },

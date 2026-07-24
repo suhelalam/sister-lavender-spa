@@ -63,7 +63,16 @@ export default async function handler(req, res) {
           const data = docSnap.data() || {};
           const receiptNumber = String(data.receiptNumber || '').trim();
           const id = receiptNumber || `cash-${docSnap.id}`;
-          const amountCents = Math.max(0, Math.round(Number(data.amount || 0)));
+          // Current cash records store integer cents explicitly. Records created
+          // before that contract stored `amount` in dollars.
+          const amountCents = Math.max(
+            0,
+            Math.round(
+              data.amountCents != null
+                ? Number(data.amountCents)
+                : Number(data.amount || 0) * 100
+            )
+          );
           const discountAmountCents = Math.max(
             0,
             Math.round(Number(data.discountAmount || 0) * 100)
