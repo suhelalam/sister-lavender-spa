@@ -6,6 +6,7 @@ import { Menu, X, ShoppingCart, MapPin, Phone } from 'lucide-react';
 import { useCart } from '../context/CartContext'; // adjust path if needed
 import { defaultBusinessHours } from '../lib/homeSettings';
 
+
 // Client-only cart button to prevent hydration mismatch on badge
 function ClientOnlyCartButton({ totalItems, onClick }) {
   const [hasMounted, setHasMounted] = useState(false);
