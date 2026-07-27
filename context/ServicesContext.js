@@ -14,19 +14,41 @@ const normalizePrice = (price) => {
   return `$${parsed.toFixed(2)}`;
 };
 
-const normalizeService = (service) => ({
-  id: service.id,
-  name: service.name || "",
-  category: service.category || "",
-  description: service.description || "",
-  duration: Number(service.duration || 0),
-  price: normalizePrice(service.price),
-  image: service.image || "",
-  variations: Array.isArray(service.variations) ? service.variations : [],
-  isAddOn: Boolean(service.isAddOn),
-  isActive: service.isActive !== false,
-  appliesToCategory: service.appliesToCategory || "",
-});
+const displayPriceToCents = (price) => {
+  const parsed = Number.parseFloat(String(price ?? "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
+};
+
+const normalizeService = (service) => {
+  const duration = Number(service.duration || 0);
+  const price = normalizePrice(service.price);
+  const isAddOn = Boolean(service.isAddOn);
+  let variations = Array.isArray(service.variations) ? service.variations : [];
+
+  // The main service form is the source of truth when there is only one option.
+  // Older records can otherwise retain a stale nested variation duration/price.
+  if (!isAddOn && variations.length === 1) {
+    variations = [{
+      ...variations[0],
+      duration: duration * 60000,
+      price: displayPriceToCents(price),
+    }];
+  }
+
+  return {
+    id: service.id,
+    name: service.name || "",
+    category: service.category || "",
+    description: service.description || "",
+    duration,
+    price,
+    image: service.image || "",
+    variations,
+    isAddOn,
+    isActive: service.isActive !== false,
+    appliesToCategory: service.appliesToCategory || "",
+  };
+};
 
 const sortServices = (items) =>
   [...items].sort((a, b) => {

@@ -110,25 +110,31 @@ export default function AdminServicesPage() {
   const handleServiceSubmit = async (e) => {
     e.preventDefault();
 
+    const durationMinutes = parseInt(formData.duration, 10);
     const displayPrice = formData.price.includes('$') 
       ? formData.price 
       : `$${parseFloat(formData.price).toFixed(2)}`;
+    const hasSingleVariation = formData.variations.length === 1;
     
     const serviceData = {
       id: editingService ? editingService.id : formData.name.toLowerCase().replace(/\s+/g, '-'),
       name: formData.name,
       category: formData.category,
       description: formData.description,
-      duration: parseInt(formData.duration),
+      duration: durationMinutes,
       price: displayPrice,
       image: formData.image,
       isActive: formData.isActive !== false,
       variations: formData.variations.map(variation => ({
         id: variation.id || `${formData.name.toLowerCase().replace(/\s+/g, '-')}-${variation.name.toLowerCase().replace(/\s+/g, '-')}`,
         name: variation.name,
-        price: typeof variation.price === 'number' ? Math.round(variation.price) : toCents(variation.price),
+        price: hasSingleVariation
+          ? toCents(displayPrice)
+          : (typeof variation.price === 'number' ? Math.round(variation.price) : toCents(variation.price)),
         currency: variation.currency || 'USD',
-        duration: typeof variation.duration === 'number' ? Math.round(variation.duration) : parseInt(variation.duration) * 60000,
+        duration: hasSingleVariation
+          ? durationMinutes * 60000
+          : (typeof variation.duration === 'number' ? Math.round(variation.duration) : parseInt(variation.duration, 10) * 60000),
         version: 1
       }))
     };
