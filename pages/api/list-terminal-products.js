@@ -15,9 +15,20 @@ export default async function handler(req, res) {
       expand: ['data.product'],
     });
 
-    const inferCategoryFromName = (name = '') => {
+    const inferCategoryFromName = (name = '', description = '') => {
       const clean = String(name).trim();
       if (!clean) return 'Other Services';
+      const searchable = `${clean} ${description || ''}`.toLowerCase();
+
+      // These Stripe products predate category metadata but belong to Head Spa.
+      if (
+        searchable.includes('fresh boost') ||
+        searchable.includes('classic relax') ||
+        searchable.includes('head spa') ||
+        searchable.includes('scalp')
+      ) {
+        return 'Head Spa Treatments';
+      }
       if (clean.includes(' - ')) return clean.split(' - ')[0].trim();
       if (clean.includes(':')) return clean.split(':')[0].trim();
       if (clean.includes('(')) return clean.split('(')[0].trim();
@@ -26,6 +37,14 @@ export default async function handler(req, res) {
 
     const items = prices.data
       .filter((price) => price.unit_amount && price.product && typeof price.product !== 'string')
+      .filter((price) => {
+        const productName = String(price.product.name || '').toLowerCase();
+        // Ignore products from the retired standalone "Head Spa" category.
+        return (
+          !productName.includes('fresh boost') &&
+          !productName.includes('classic relax')
+        );
+      })
       .map((price) => {
         const product = price.product;
         const amount = price.unit_amount || 0;
@@ -36,7 +55,7 @@ export default async function handler(req, res) {
         const appliesToCategory = String(product.metadata?.applies_to_category || '').trim();
         const productCategory =
           String(product.metadata?.category || product.metadata?.service_category || '').trim() ||
-          inferCategoryFromName(product.name);
+          inferCategoryFromName(product.name, product.description);
 
         // Keep add-ons inside their main service category for easier terminal navigation.
         const category =
@@ -52,6 +71,7 @@ export default async function handler(req, res) {
           category,
           is_add_on: isAddOn,
           description: product.description || '',
+          variation_name: price.nickname || '',
           label: `${optionName} — $${amountDisplay}`,
           amount,
           currency,

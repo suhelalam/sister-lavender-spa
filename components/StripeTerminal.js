@@ -2,13 +2,120 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 
+function ServicePickerButton({ item, selectedServices, onAdd, isAddOn = false }) {
+  const variations = item.variations?.length ? item.variations : [item];
+  const [selectedVariationId, setSelectedVariationId] = useState(variations[0].id);
+  const selectedVariation =
+    variations.find((variation) => variation.id === selectedVariationId) || variations[0];
+  const showVariationPills =
+    variations.length > 1 ||
+    (selectedVariation.variation_name &&
+      selectedVariation.variation_name.toLowerCase() !== 'standard');
+  const selectedQuantity =
+    selectedServices.find((service) => service.id === selectedVariation.id)?.quantity || 0;
+  const hasRequiredMainService =
+    !isAddOn ||
+    selectedServices.some(
+      (service) => !service.is_add_on && service.category === item.category
+    );
+
+  return (
+    <div
+      role="button"
+      tabIndex={hasRequiredMainService ? 0 : -1}
+      onClick={() => hasRequiredMainService && onAdd(selectedVariation)}
+      onKeyDown={(event) => {
+        if (
+          hasRequiredMainService &&
+          (event.key === 'Enter' || event.key === ' ')
+        ) {
+          event.preventDefault();
+          onAdd(selectedVariation);
+        }
+      }}
+      aria-disabled={!hasRequiredMainService}
+      className={`relative flex min-h-[68px] w-full items-center justify-between gap-2 rounded-xl border p-3 text-left shadow-sm transition active:scale-[0.99] ${
+        !hasRequiredMainService
+          ? 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'
+          : selectedQuantity
+            ? 'cursor-pointer border-purple-500 bg-purple-50 ring-2 ring-purple-100'
+            : isAddOn
+              ? 'cursor-pointer border-amber-200 bg-amber-50/70'
+              : 'cursor-pointer border-stone-200 bg-white'
+      }`}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[13px] font-bold leading-snug text-stone-900">{item.name}</span>
+          {showVariationPills && (
+            <span className="flex flex-wrap gap-1">
+              {variations.map((variation, index) => {
+                const isSelected = variation.id === selectedVariation.id;
+                return (
+                  <button
+                    key={variation.id}
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedVariationId(variation.id);
+                    }}
+                    disabled={!hasRequiredMainService}
+                    className={`rounded-full border px-2 py-1 text-[10px] font-bold leading-none transition ${
+                      isSelected
+                        ? 'border-purple-700 bg-purple-700 text-white'
+                        : 'border-purple-200 bg-white text-purple-800'
+                    }`}
+                    aria-pressed={isSelected}
+                  >
+                    {variation.variation_name || `Option ${index + 1}`}
+                  </button>
+                );
+              })}
+            </span>
+          )}
+        </span>
+        {item.description && (
+          <span className="mt-0.5 line-clamp-1 block text-[11px] leading-snug text-stone-500">
+            {item.description}
+          </span>
+        )}
+        {!hasRequiredMainService && (
+          <span className="mt-0.5 block text-[10px] font-semibold text-stone-500">
+            Select a main service first
+          </span>
+        )}
+      </span>
+      <span className="flex-none pr-1 text-sm font-bold text-purple-800">
+        ${(selectedVariation.amount / 100).toFixed(2)}
+      </span>
+      {(selectedQuantity > 0 || !hasRequiredMainService) && (
+        <span
+          className={`absolute right-1.5 top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold shadow-sm ${
+            selectedQuantity
+              ? 'bg-purple-700 text-white'
+              : 'bg-stone-200 text-stone-600'
+          }`}
+          aria-label={
+            !hasRequiredMainService
+              ? 'Select a main service from this category first'
+              : selectedQuantity
+                ? `${selectedQuantity} selected`
+                : undefined
+          }
+        >
+          {!hasRequiredMainService ? '🔒' : selectedQuantity}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function StripeTerminal() {
   const [amount, setAmount] = useState('');
-  const [additionalCharge, setAdditionalCharge] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [stripeItems, setStripeItems] = useState([]);
-  const [selectedStripeItemId, setSelectedStripeItemId] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  const [activeServiceCategory, setActiveServiceCategory] = useState(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [coupons, setCoupons] = useState([]);
   const [selectedCouponId, setSelectedCouponId] = useState('');
@@ -85,17 +192,7 @@ export default function StripeTerminal() {
     return rawPhone;
   };
 
-  const filteredStripeItems = useMemo(() => {
-    const term = productSearch.trim().toLowerCase();
-    if (!term) return stripeItems;
-    return stripeItems.filter(
-      (item) =>
-        item.label.toLowerCase().includes(term) ||
-        item.name.toLowerCase().includes(term)
-    );
-  }, [stripeItems, productSearch]);
-
-  const groupedFilteredStripeItems = useMemo(() => {
+  const serviceGroups = useMemo(() => {
     const preferredOrder = [
       'Head Spa',
       'Body Massage',
@@ -106,8 +203,22 @@ export default function StripeTerminal() {
       'Other Services',
     ];
     const rank = new Map(preferredOrder.map((name, idx) => [name.toLowerCase(), idx]));
+    const collapseVariations = (items) =>
+      Object.values(
+        items.reduce((products, item) => {
+          const key = item.product_id || item.name;
+          if (!products[key]) {
+            products[key] = { ...item, variations: [] };
+          }
+          products[key].variations.push(item);
+          return products;
+        }, {})
+      ).map((item) => ({
+        ...item,
+        variations: item.variations.sort((a, b) => a.amount - b.amount),
+      }));
 
-    const groups = filteredStripeItems.reduce((acc, item) => {
+    const groups = stripeItems.reduce((acc, item) => {
       const category = String(item.category || 'Other Services').trim() || 'Other Services';
       if (!acc[category]) acc[category] = [];
       acc[category].push(item);
@@ -123,26 +234,56 @@ export default function StripeTerminal() {
       })
       .map(([category, items]) => {
         const sorted = items.sort((x, y) => x.name.localeCompare(y.name) || x.amount - y.amount);
-        const regularItems = sorted.filter((item) => !item.is_add_on);
-        const addOnItems = sorted.filter((item) => item.is_add_on);
+        const regularItems = collapseVariations(sorted.filter((item) => !item.is_add_on));
+        const addOnItems = collapseVariations(sorted.filter((item) => item.is_add_on));
         return {
           category,
           regularItems,
           addOnItems,
         };
       });
-  }, [filteredStripeItems]);
+  }, [stripeItems]);
+
+  const activeServiceGroup = useMemo(() => {
+    const group = serviceGroups.find(({ category }) => category === activeServiceCategory);
+    if (!group) return null;
+
+    const term = productSearch.trim().toLowerCase();
+    if (!term) return group;
+    const matchesSearch = (item) =>
+      item.label.toLowerCase().includes(term) ||
+      item.name.toLowerCase().includes(term) ||
+      String(item.description || '').toLowerCase().includes(term) ||
+      item.variations?.some((variation) =>
+        String(variation.variation_name || '').toLowerCase().includes(term)
+      );
+
+    return {
+      ...group,
+      addOnItems: group.addOnItems.filter(matchesSearch),
+      regularItems: group.regularItems.filter(matchesSearch),
+    };
+  }, [activeServiceCategory, productSearch, serviceGroups]);
+
+  const categoryIcon = (category) => {
+    const name = category.toLowerCase();
+    if (name.includes('head')) return '💆‍♀️';
+    if (name.includes('body') || name.includes('massage')) return '🌿';
+    if (name.includes('foot') || name.includes('pedicure')) return '🦶';
+    if (name.includes('manicure') || name.includes('nail')) return '💅';
+    if (name.includes('side-by-side') || name.includes('couple')) return '🪷';
+    return '✨';
+  };
 
   const selectedServicesAmount = selectedServices.reduce(
     (sum, item) => sum + (item.amount / 100) * item.quantity,
     0
   );
   const manualAmount = parseFloat(amount) || 0;
-  const additionalChargeAmount = parseFloat(additionalCharge) || 0;
   const primaryAmount = selectedServices.length > 0 ? selectedServicesAmount : manualAmount;
 
   // ----- Amount math -----
-  const baseAmount = primaryAmount + additionalChargeAmount;
+  const baseAmount = primaryAmount;
 
   const couponAppliesToProductIds = new Set(
     Array.isArray(selectedCoupon?.applies_to_product_ids)
@@ -158,7 +299,6 @@ export default function StripeTerminal() {
   }, 0);
 
   // Coupons apply to selected services. For manual-only sales, unrestricted coupons can apply.
-  // Custom add-on amounts are never coupon-eligible.
   const couponEligibleAmount =
     selectedServices.length > 0
       ? eligibleSelectedServicesAmount
@@ -249,18 +389,62 @@ export default function StripeTerminal() {
   }, []);
 
   useEffect(() => {
-    if (!selectedStripeItemId && filteredStripeItems.length > 0) {
-      setSelectedStripeItemId(filteredStripeItems[0].id);
-    }
-  }, [filteredStripeItems, selectedStripeItemId]);
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverscroll = document.body.style.overscrollBehavior;
+    const landscapeQuery = window.matchMedia(
+      '(min-width: 900px) and (orientation: landscape)'
+    );
+    const updateScrollLock = () => {
+      if (landscapeQuery.matches) {
+        window.scrollTo(0, 0);
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.overscrollBehavior = 'none';
+      } else {
+        document.body.style.overflow = previousBodyOverflow;
+        document.documentElement.style.overflow = previousHtmlOverflow;
+        document.body.style.overscrollBehavior = previousBodyOverscroll;
+      }
+    };
+
+    updateScrollLock();
+    landscapeQuery.addEventListener('change', updateScrollLock);
+
+    return () => {
+      landscapeQuery.removeEventListener('change', updateScrollLock);
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overscrollBehavior = previousBodyOverscroll;
+    };
+  }, []);
 
   useEffect(() => {
     setCartPreviewShown(false);
-  }, [selectedServices, selectedReaderId, includeFee, selectedCouponId, amount, additionalCharge, redeemRewards]);
+  }, [selectedServices, selectedReaderId, includeFee, selectedCouponId, amount, redeemRewards]);
 
   useEffect(() => {
     if (!canRedeemRewards) setRedeemRewards(false);
   }, [canRedeemRewards]);
+
+  useEffect(() => {
+    if (!activeServiceCategory) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setActiveServiceCategory(null);
+        setProductSearch('');
+      }
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeServiceCategory]);
 
   const clearTerminalUiState = () => {
     setActivePaymentIntentId(null);
@@ -316,9 +500,8 @@ export default function StripeTerminal() {
 
   const resetForm = () => {
     setAmount('');
-    setAdditionalCharge('');
-    setSelectedStripeItemId('');
     setProductSearch('');
+    setActiveServiceCategory(null);
     setSelectedServices([]);
     setIncludeFee(true);
     setSelectedCouponId('');
@@ -402,11 +585,15 @@ export default function StripeTerminal() {
     }
   };
 
-  const addSelectedService = () => {
-    if (!selectedStripeItemId) return;
-
-    const matched = stripeItems.find((item) => item.id === selectedStripeItemId);
-    if (!matched) return;
+  const addService = (matched) => {
+    if (
+      matched.is_add_on &&
+      !selectedServices.some(
+        (service) => !service.is_add_on && service.category === matched.category
+      )
+    ) {
+      return;
+    }
 
     setSelectedServices((prev) => {
       const existing = prev.find((service) => service.id === matched.id);
@@ -417,16 +604,25 @@ export default function StripeTerminal() {
       }
       return [...prev, { ...matched, quantity: 1 }];
     });
-
-    // Reset search after adding so staff can quickly search the next service.
-    setProductSearch('');
   };
 
   const updateServiceQuantity = (id, nextQuantity) => {
     setSelectedServices((prev) => {
-      if (nextQuantity <= 0) return prev.filter((service) => service.id !== id);
-      return prev.map((service) =>
-        service.id === id ? { ...service, quantity: nextQuantity } : service
+      const updated =
+        nextQuantity <= 0
+          ? prev.filter((service) => service.id !== id)
+          : prev.map((service) =>
+              service.id === id ? { ...service, quantity: nextQuantity } : service
+            );
+      const categoriesWithMainServices = new Set(
+        updated
+          .filter((service) => !service.is_add_on)
+          .map((service) => service.category)
+      );
+
+      return updated.filter(
+        (service) =>
+          !service.is_add_on || categoriesWithMainServices.has(service.category)
       );
     });
   };
@@ -502,7 +698,9 @@ export default function StripeTerminal() {
       const baseServiceLines =
         selectedServices.length > 0
           ? selectedServices.map((service) => ({
-              name: service.name,
+              name: service.variation_name
+                ? `${service.name} — ${service.variation_name}`
+                : service.name,
               amount: Math.max(0, Math.round(Number(service.amount || 0))),
               quantity: Math.max(1, Math.round(Number(service.quantity || 1))),
             }))
@@ -516,18 +714,7 @@ export default function StripeTerminal() {
               ]
             : [];
 
-      const additionalChargeCents = Math.max(0, Math.round(additionalChargeAmount * 100));
-      const servicesForReceipt =
-        additionalChargeCents > 0
-          ? [
-              ...baseServiceLines,
-              {
-                name: 'Custom add-on',
-                amount: additionalChargeCents,
-                quantity: 1,
-              },
-            ]
-          : baseServiceLines;
+      const servicesForReceipt = baseServiceLines;
 
       // Register cash payment
       const resp = await fetch('/api/register-cash-payment', {
@@ -600,7 +787,9 @@ export default function StripeTerminal() {
       const baseServiceLines =
         selectedServices.length > 0
           ? selectedServices.map((service) => ({
-              name: service.name,
+              name: service.variation_name
+                ? `${service.name} — ${service.variation_name}`
+                : service.name,
               amount: Math.max(0, Math.round(Number(service.amount || 0))),
               quantity: Math.max(1, Math.round(Number(service.quantity || 1))),
             }))
@@ -614,18 +803,7 @@ export default function StripeTerminal() {
               ]
             : [];
 
-      const additionalChargeCents = Math.max(0, Math.round(additionalChargeAmount * 100));
-      const linesWithCustomCharge =
-        additionalChargeCents > 0
-          ? [
-              ...baseServiceLines,
-              {
-                name: 'Custom add-on',
-                amount: additionalChargeCents,
-                quantity: 1,
-              },
-            ]
-          : baseServiceLines;
+      const linesWithCustomCharge = baseServiceLines;
 
       const servicesForCharge =
         feeAmountCents > 0
@@ -778,8 +956,8 @@ export default function StripeTerminal() {
   };
 
   return (
-    <div className="p-6 border rounded-lg bg-white max-w-md mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-purple-700">Stripe Terminal</h2>
+    <div className="terminal-shell mx-auto max-w-6xl rounded-xl border bg-white p-3 sm:p-4">
+      <h2 className="mb-3 text-xl font-bold text-purple-700">Stripe Terminal</h2>
 
       {/* Receipt Display */}
       {receipt && (
@@ -835,9 +1013,10 @@ export default function StripeTerminal() {
         </div>
       )}
 
+      <div className="terminal-dashboard">
       {/* Payment Method Selection */}
-      <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-        <h3 className="font-semibold mb-3">Payment Method</h3>
+      <div className="terminal-payment-method mb-3 rounded-lg border bg-gray-50 p-3">
+        <h3 className="mb-2 text-sm font-semibold">Payment Method</h3>
         <div className="flex gap-4">
           <label className="flex items-center cursor-pointer">
             <input
@@ -867,8 +1046,8 @@ export default function StripeTerminal() {
       </div>
 
       {/* Customer Lookup (Optional) */}
-      <div className="mb-6 p-4 border rounded-lg bg-blue-50">
-        <h3 className="font-semibold mb-3">Attach to Customer (Optional)</h3>
+      <div className="terminal-customer mb-3 rounded-lg border bg-blue-50 p-3">
+        <h3 className="mb-2 text-sm font-semibold">Attach to Customer (Optional)</h3>
         <div className="space-y-2">
           <p className="text-xs text-gray-600">Search by email, phone, or name</p>
           <div className="flex gap-2">
@@ -961,8 +1140,20 @@ export default function StripeTerminal() {
       </div>
 
       {/* Amount Input */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium mb-2">Select Service (Stripe)</label>
+      <div className="terminal-sale mb-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-stone-800">Choose Services</h3>
+            <p className="mt-1 text-xs text-stone-500">Tap a category, then tap a service to add it.</p>
+          </div>
+          <button
+            onClick={refreshStripeItems}
+            className="flex-none rounded-lg border border-purple-200 bg-white px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-50 disabled:opacity-60"
+            disabled={isLoading || isCanceling || loadingStripeItems}
+          >
+            {loadingStripeItems ? 'Refreshing…' : 'Refresh services'}
+          </button>
+        </div>
         {loadingStripeItems ? (
           <div className="p-3 border rounded-lg bg-gray-50 text-sm text-gray-600 mb-3">
             Loading Stripe products...
@@ -980,74 +1171,57 @@ export default function StripeTerminal() {
           </div>
         ) : (
           <div className="space-y-2 mb-3">
-            <input
-              type="text"
-              value={productSearch}
-              onChange={(e) => {
-                setProductSearch(e.target.value);
-                setSelectedStripeItemId('');
-              }}
-              placeholder="Search services..."
-              className="w-full p-3 border rounded-lg"
-              disabled={isLoading || isCanceling}
-            />
-            <select
-              value={selectedStripeItemId}
-              onChange={(e) => {
-                setSelectedStripeItemId(e.target.value);
-              }}
-              className="w-full p-3 border rounded-lg"
-              disabled={isLoading || isCanceling}
-            >
-              <option value="">
-                {filteredStripeItems.length ? 'Select a service to add' : 'No matching services'}
-              </option>
-              {groupedFilteredStripeItems.map((group) => (
-                <optgroup key={group.category} label={group.category}>
-                  {group.regularItems.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                  {group.addOnItems.length > 0 && group.regularItems.length > 0 && (
-                    <option disabled value={`divider-${group.category}`}>
-                      ---------- Add-ons ----------
-                    </option>
-                  )}
-                  {group.addOnItems.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            <button
-              onClick={addSelectedService}
-              className="w-full bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition disabled:opacity-60 text-sm"
-              disabled={!selectedStripeItemId || isLoading || isCanceling}
-            >
-              Add Service
-            </button>
-            <button
-              onClick={refreshStripeItems}
-              className="w-full bg-purple-600 text-white p-2 rounded-lg hover:bg-purple-700 transition disabled:opacity-60 text-sm"
-              disabled={isLoading || isCanceling}
-            >
-              Refresh Stripe Products
-            </button>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {serviceGroups.map((group) => {
+                const itemCount = group.regularItems.length + group.addOnItems.length;
+                return (
+                  <button
+                    key={group.category}
+                    type="button"
+                    onClick={() => {
+                      setProductSearch('');
+                      setActiveServiceCategory(group.category);
+                    }}
+                    className="flex min-h-[72px] items-center gap-2.5 rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-white p-2.5 text-left shadow-sm transition active:scale-[0.98] disabled:opacity-60"
+                    disabled={isLoading || isCanceling}
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-base shadow-sm" aria-hidden="true">
+                      {categoryIcon(group.category)}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-bold leading-tight text-purple-900">
+                        {group.category}
+                      </span>
+                      <span className="mt-1 block text-[10px] text-purple-600">
+                        {itemCount} {itemCount === 1 ? 'option' : 'options'}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {serviceGroups.length === 0 && (
+              <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-600">
+                No services are currently available.
+              </div>
+            )}
             {selectedServices.length > 0 && (
               <div className="border rounded-lg p-3 bg-gray-50 space-y-2">
                 <p className="text-sm font-medium">Selected Services</p>
                 {selectedServices.map((service) => (
                   <div key={service.id} className="flex items-center justify-between gap-2 text-sm">
-                    <div className="min-w-0">
-                      <p className="truncate">{service.name}</p>
-                      <p className="text-gray-600">
-                        ${(service.amount / 100).toFixed(2)} each
-                      </p>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <p className="truncate font-medium">{service.name}</p>
+                      {service.variation_name && (
+                        <span className="flex-none rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+                          {service.variation_name}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-none items-center gap-2">
+                      <span className="font-semibold text-purple-800">
+                        ${(service.amount / 100).toFixed(2)}
+                      </span>
                       <button
                         onClick={() => updateServiceQuantity(service.id, service.quantity - 1)}
                         className="px-2 py-1 border rounded"
@@ -1071,29 +1245,123 @@ export default function StripeTerminal() {
           </div>
         )}
 
-        <label className="block text-sm font-medium mb-2">Base Amount ($)</label>
-        <input
-          type="number"
-          step="0.01"
-          min="0.50"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder={selectedServices.length > 0 ? 'Calculated from selected services' : '0.00'}
-          className="w-full p-3 border rounded-lg text-lg mb-3"
-          disabled={isLoading || isCanceling || selectedServices.length > 0}
-        />
+        {activeServiceGroup && (
+          <div
+            className="fixed inset-0 z-[100] flex items-end justify-center bg-stone-950/55 p-0 backdrop-blur-sm sm:items-center sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="service-category-title"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setActiveServiceCategory(null);
+                setProductSearch('');
+              }
+            }}
+          >
+            <div className="flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-2xl bg-[#fbfaf7] shadow-2xl sm:max-h-[92vh] sm:rounded-2xl">
+              <div className="border-b border-stone-200 bg-white px-4 py-3 sm:px-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-purple-600">Service category</p>
+                    <h2 id="service-category-title" className="mt-0.5 text-xl font-bold text-purple-950">
+                      {activeServiceGroup.category}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveServiceCategory(null);
+                      setProductSearch('');
+                    }}
+                    className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-stone-100 text-xl text-stone-700"
+                    aria-label="Close service category"
+                  >
+                    ×
+                  </button>
+                </div>
+                <input
+                  type="search"
+                  value={productSearch}
+                  onChange={(event) => setProductSearch(event.target.value)}
+                  placeholder={`Search ${activeServiceGroup.category}...`}
+                  className="mt-2 min-h-[42px] w-full rounded-lg border border-stone-300 bg-stone-50 px-3 text-sm outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100"
+                />
+              </div>
 
-        <label className="block text-sm font-medium mb-2">Additional Custom Charge ($)</label>
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          value={additionalCharge}
-          onChange={(e) => setAdditionalCharge(e.target.value)}
-          placeholder="0.00"
-          className="w-full p-3 border rounded-lg text-lg mb-3"
-          disabled={isLoading || isCanceling}
-        />
+              <div className="overflow-y-auto overscroll-contain px-4 py-3 sm:px-5">
+                {activeServiceGroup.addOnItems.length > 0 && (
+                  <section className="mb-4">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-800">Add-ons</span>
+                      <span className="text-xs text-stone-500">Requires a main service from this category</span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {activeServiceGroup.addOnItems.map((item) => (
+                        <ServicePickerButton key={item.id} item={item} selectedServices={selectedServices} onAdd={addService} isAddOn />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {activeServiceGroup.regularItems.length > 0 && (
+                  <section>
+                    <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Services</h3>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {activeServiceGroup.regularItems.map((item) => (
+                        <ServicePickerButton key={item.id} item={item} selectedServices={selectedServices} onAdd={addService} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {activeServiceGroup.addOnItems.length === 0 && activeServiceGroup.regularItems.length === 0 && (
+                  <div className="py-16 text-center">
+                    <p className="font-semibold text-stone-700">No matching services</p>
+                    <button type="button" onClick={() => setProductSearch('')} className="mt-3 text-sm font-semibold text-purple-700">
+                      Clear search
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-stone-200 bg-white p-3 sm:px-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveServiceCategory(null);
+                    setProductSearch('');
+                  }}
+                  className="min-h-[44px] w-full rounded-lg bg-purple-700 px-5 text-sm font-bold text-white active:bg-purple-800"
+                >
+                  Done{selectedServices.length > 0 ? ` · ${selectedServices.reduce((sum, service) => sum + service.quantity, 0)} selected` : ''}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedServices.length === 0 && (
+          <div className="mb-2 flex items-center gap-3 rounded-lg border bg-stone-50 p-2">
+            <label htmlFor="custom-sale-amount" className="flex-none text-sm font-medium text-stone-700">
+              Custom sale
+            </label>
+            <div className="relative min-w-0 flex-1">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-500">$</span>
+              <input
+                id="custom-sale-amount"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0.50"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full rounded-lg border bg-white py-2 pl-7 pr-3 text-base"
+                disabled={isLoading || isCanceling}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Discount Options */}
         <div className="mb-3">
@@ -1130,99 +1398,17 @@ export default function StripeTerminal() {
           )}
         </div>
 
-        {/* 3% Fee Always Included */}
-        <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
-          <span className="text-sm font-medium">
-            Card processing fee {paymentMethod === 'card' ? '(3%)' : '(Cash - No Fee)'}
-          </span>
-          {baseAmount > 0 && (
-            <span className="text-sm text-gray-600">
-              {paymentMethod === 'card' ? `+$${feeAmount.toFixed(2)}` : 'No fee'}
-            </span>
-          )}
-        </div>
-
-        {/* Amount Summary */}
-        {baseAmount > 0 && (
-          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex justify-between text-sm">
-              <span>Services/custom amount:</span>
-              <span>${primaryAmount.toFixed(2)}</span>
-            </div>
-            {additionalChargeAmount > 0 && (
-              <div className="flex justify-between text-sm">
-                <span>Custom add-on:</span>
-                <span>${additionalChargeAmount.toFixed(2)}</span>
-              </div>
-            )}
-            {additionalChargeAmount > 0 && (
-              <div className="flex justify-between text-sm font-medium border-t border-blue-200 pt-1 mt-1">
-                <span>Subtotal:</span>
-                <span>${baseAmount.toFixed(2)}</span>
-              </div>
-            )}
-
-            {selectedCoupon && discountAmount > 0 && (
-              <div className="flex justify-between text-sm text-green-600">
-                <span>
-                  Coupon ({selectedCoupon.code}):
-                </span>
-                <span>-${discountAmount.toFixed(2)}</span>
-              </div>
-            )}
-
-            {rewardDiscountAmount > 0 && (
-              <div className="flex justify-between text-sm font-semibold text-green-700">
-                <span>Rewards (500 points):</span><span>-$10.00</span>
-              </div>
-            )}
-
-            {selectedCoupon && hasCouponProductRestrictions && selectedServices.length > 0 && (
-              <div className="flex justify-between text-xs text-blue-700">
-                <span>Coupon-eligible services:</span>
-                <span>${eligibleSelectedServicesAmount.toFixed(2)}</span>
-              </div>
-            )}
-
-            {selectedCoupon && hasCouponProductRestrictions && couponEligibleAmount <= 0 && (
-              <div className="mt-1 text-xs text-amber-700">
-                This coupon does not apply to the currently selected services.
-              </div>
-            )}
-
-            {(discountAmount > 0 || rewardDiscountAmount > 0 || includeFee) && (
-              <div className="flex justify-between text-sm font-medium border-t border-blue-200 pt-1 mt-1">
-                <span>After discount:</span>
-                <span>${amountAfterRewards.toFixed(2)}</span>
-              </div>
-            )}
-
-            {includeFee && (
-              <div className="flex justify-between text-sm">
-                <span>Processing fee (3%):</span>
-                <span>+${feeAmount.toFixed(2)}</span>
-              </div>
-            )}
-
-            <div className="flex justify-between font-semibold border-t border-blue-200 pt-2 mt-2">
-              <span>Total to charge:</span>
-              <span>${displayAmount.toFixed(2)}</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Reader Selection (server-driven) - Only for Card Payments */}
       {paymentMethod === 'card' && (
-        <div className="mb-6">
-          <h3 className="font-semibold mb-3">Card Reader</h3>
-
+        <div className="terminal-reader mb-3">
           {loadingReaders ? (
-            <div className="p-4 border rounded-lg bg-gray-50 text-center text-gray-600">
+            <div className="rounded-lg border bg-gray-50 p-2 text-center text-sm text-gray-600">
               Loading readers...
             </div>
           ) : readersError ? (
-            <div className="p-4 border rounded-lg bg-red-50 border-red-200">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-2">
               <p className="text-red-600 text-sm">Failed to load readers: {readersError}</p>
               <button
                 onClick={refreshReaders}
@@ -1233,7 +1419,7 @@ export default function StripeTerminal() {
               </button>
             </div>
           ) : readers.length === 0 ? (
-            <div className="p-4 border rounded-lg bg-gray-50 text-center">
+            <div className="rounded-lg border bg-gray-50 p-2 text-center">
               <p className="text-gray-600">No readers found in Stripe.</p>
               <button
                 onClick={refreshReaders}
@@ -1244,11 +1430,11 @@ export default function StripeTerminal() {
               </button>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="flex items-center gap-2">
               <select
                 value={selectedReaderId}
                 onChange={(e) => setSelectedReaderId(e.target.value)}
-                className="w-full p-3 border rounded-lg"
+                className="min-w-0 flex-1 rounded-lg border bg-white p-2 text-sm"
                 disabled={isLoading || isCanceling}
               >
                 {readers.map((r) => (
@@ -1260,10 +1446,10 @@ export default function StripeTerminal() {
 
               <button
                 onClick={refreshReaders}
-                className="w-full bg-purple-600 text-white p-3 rounded-lg hover:bg-purple-700 transition disabled:opacity-60"
+                className="flex-none rounded-lg bg-purple-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-purple-700 disabled:opacity-60"
                 disabled={isLoading || isCanceling}
               >
-                Refresh Readers
+                Refresh
               </button>
             </div>
           )}
@@ -1271,7 +1457,7 @@ export default function StripeTerminal() {
       )}
 
       {/* Payment Buttons */}
-      <div className="space-y-3">
+      <div className="terminal-actions space-y-2">
         {paymentStatus && (
           <div
             className={`p-3 rounded text-sm ${
@@ -1286,12 +1472,43 @@ export default function StripeTerminal() {
           </div>
         )}
 
+        {baseAmount > 0 && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-2">
+            <div className="flex justify-between text-xs text-blue-900">
+              <span>Services</span>
+              <span>${primaryAmount.toFixed(2)}</span>
+            </div>
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-xs text-green-700">
+                <span>Coupon{selectedCoupon?.code ? ` (${selectedCoupon.code})` : ''}</span>
+                <span>-${discountAmount.toFixed(2)}</span>
+              </div>
+            )}
+            {rewardDiscountAmount > 0 && (
+              <div className="flex justify-between text-xs text-green-700">
+                <span>Rewards</span>
+                <span>-$10.00</span>
+              </div>
+            )}
+            {includeFee && paymentMethod === 'card' && (
+              <div className="flex justify-between text-xs text-blue-900">
+                <span>Processing fee (3%)</span>
+                <span>+${feeAmount.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="mt-1 flex justify-between border-t border-blue-200 pt-1 text-base font-bold text-blue-950">
+              <span>Total charge</span>
+              <span>${displayAmount.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+
         {paymentMethod === 'card' ? (
           <>
             <button
               onClick={handlePayment}
               disabled={!selectedReaderId || baseAmount <= 0 || isLoading || isCanceling}
-              className="w-full bg-green-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-green-700 transition"
+              className="w-full rounded-lg bg-green-600 p-3 text-base font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
               {isLoading
                 ? 'Sending to reader...'
@@ -1305,7 +1522,7 @@ export default function StripeTerminal() {
               <button
                 onClick={cancelPayment}
                 disabled={isCanceling}
-                className="w-full bg-red-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-red-700 transition"
+                className="w-full rounded-lg bg-red-600 p-3 text-base font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
               >
                 {isCanceling ? 'Canceling...' : cartPreviewShown && !activePaymentIntentId ? 'Clear Reader Cart' : 'Cancel Payment'}
               </button>
@@ -1315,11 +1532,13 @@ export default function StripeTerminal() {
           <button
             onClick={handleCashPayment}
             disabled={baseAmount <= 0 || isLoading}
-            className="w-full bg-blue-600 text-white p-4 rounded-lg text-lg font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-blue-700 transition"
+            className="w-full rounded-lg bg-blue-600 p-3 text-base font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
           >
             {isLoading ? 'Registering...' : `Register Cash Payment - $${displayAmount.toFixed(2) || '0.00'}`}
           </button>
         )}
+
+      </div>
       </div>
     </div>
   );

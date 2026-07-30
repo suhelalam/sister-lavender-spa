@@ -52,7 +52,8 @@ export default function Layout({ children }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [footerHours, setFooterHours] = useState(defaultBusinessHours);
   const { items, totalItems, removeItem, clearCart } = useCart();
-  const isCheckInKiosk = pathname === '/check-in' || pathname === '/CheckInPage';
+  const isCheckInKiosk =
+    pathname === '/check-in' || pathname === '/CheckInPage' || pathname === '/terminal';
 
   const navItems = [
     { label: 'Home', href: '/' },

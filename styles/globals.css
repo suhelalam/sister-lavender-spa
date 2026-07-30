@@ -58,6 +58,78 @@ html { scroll-behavior:smooth; }
 @media(max-width:900px){.top-strip span,.top-strip a:last-child{display:none}.hero{grid-template-columns:1fr}.hero-copy{padding:4rem 1.5rem}.hero-image{min-height:440px}.quick-actions{grid-template-columns:1fr 1fr;margin:0;border-radius:0}.feature-grid,.review-grid{grid-template-columns:1fr}.service-feature-image{height:360px}.rewards-band{flex-direction:column;align-items:flex-start}.section{padding:5rem 1.2rem}.section-heading{align-items:flex-start;flex-direction:column}.couples-section{min-height:600px}.page-container{max-width:100%}}
 @media(max-width:520px){.quick-actions a{font-size:.75rem;padding:1rem .4rem}.hero-image{min-height:340px}.service-feature-image{height:280px}.reward-orb{width:190px}.promo-card{padding:2rem 1.3rem}}
 
+.terminal-page{min-height:100vh;min-height:100dvh;overflow-y:auto}
+.terminal-page-inner{min-height:100%}
+
+@media(min-width:900px) and (orientation:landscape){
+  .terminal-page{position:fixed;inset:0;min-height:0;overflow:hidden}
+  .terminal-page-inner{height:100%;overflow:hidden}
+  .terminal-shell{
+    height:100%;
+    overflow:hidden;
+  }
+  .terminal-dashboard{
+    --terminal-controls-width:340px;
+    position:relative;
+    display:grid;
+    height:calc(100% - 2.5rem);
+    min-height:0;
+    grid-template-columns:minmax(0,1fr) var(--terminal-controls-width);
+    grid-template-rows:auto auto auto minmax(0,1fr);
+    grid-template-areas:"sale method" "sale customer" "sale reader" "sale .";
+    align-items:start;
+    gap:.75rem 1rem;
+    overflow:hidden;
+  }
+  .terminal-dashboard:after{
+    content:'';
+    position:absolute;
+    z-index:0;
+    top:0;
+    right:0;
+    bottom:0;
+    width:var(--terminal-controls-width);
+    border:1px solid #e5ded6;
+    border-radius:1rem;
+    background:#fbfaf7;
+    box-shadow:0 10px 30px rgba(68,53,45,.08);
+  }
+  .terminal-payment-method,.terminal-customer,.terminal-reader,.terminal-actions{
+    position:relative;
+    z-index:1;
+    margin-left:.75rem;
+    margin-right:.75rem;
+  }
+  .terminal-payment-method{grid-area:method;margin-top:.75rem}
+  .terminal-customer{grid-area:customer}
+  .terminal-sale{
+    grid-area:sale;
+    min-width:0;
+    height:100%;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    padding-right:.35rem;
+  }
+  .terminal-reader{grid-area:reader}
+  .terminal-actions{
+    position:absolute;
+    z-index:2;
+    right:.75rem;
+    bottom:.75rem;
+    width:calc(var(--terminal-controls-width) - 1.5rem);
+    margin:0;
+  }
+  .terminal-reader{margin-bottom:4.5rem}
+  .terminal-customer,.terminal-payment-method,.terminal-reader{margin-bottom:0}
+}
+
+@media(min-width:1180px) and (orientation:landscape){
+  .terminal-dashboard{
+    --terminal-controls-width:380px;
+    grid-template-columns:minmax(0,1fr) var(--terminal-controls-width);
+  }
+}
+
 .skip-link {
   @apply absolute left-4 top-2 z-[70] rounded-md bg-black px-4 py-2 text-sm font-semibold text-white;
   transform: translateY(-180%);

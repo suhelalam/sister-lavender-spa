@@ -31,6 +31,31 @@ function toUnixSeconds(value, fallbackIso = null) {
   return Math.floor(Date.now() / 1000);
 }
 
+async function listAllPaymentIntents(stripe) {
+  const paymentIntents = [];
+  let startingAfter;
+
+  do {
+    const page = await stripe.paymentIntents.list({
+      limit: 100,
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+      expand: ['data.customer', 'data.charges'],
+    });
+
+    paymentIntents.push(...page.data);
+
+    if (!page.has_more) break;
+
+    const lastPaymentIntent = page.data[page.data.length - 1];
+    if (!lastPaymentIntent?.id) {
+      throw new Error('Stripe returned an incomplete payment intent page.');
+    }
+    startingAfter = lastPaymentIntent.id;
+  } while (true);
+
+  return paymentIntents;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -113,14 +138,12 @@ export default async function handler(req, res) {
       }
     }
 
-    // List payment intents, limit to 100 for now, then filter by succeeded
-    const paymentIntents = await stripe.paymentIntents.list({
-      limit: 100,
-      expand: ['data.customer', 'data.charges'],
-    });
+    // Stripe returns at most 100 payment intents per request. Walk every page so
+    // older receipts do not disappear once more than 100 newer payments exist.
+    const paymentIntents = await listAllPaymentIntents(stripe);
 
     // Filter to only succeeded
-    const succeededIntents = paymentIntents.data.filter(pi => pi.status === 'succeeded');
+    const succeededIntents = paymentIntents.filter(pi => pi.status === 'succeeded');
 
     // For each payment intent, get the charge to get more details if needed
     const receipts = await Promise.all(
