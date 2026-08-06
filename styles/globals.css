@@ -146,6 +146,15 @@ html { scroll-behavior:smooth; }
 }
 
 /* Receipt printing styles */
+@media screen {
+  .receipt-print {
+    position: fixed;
+    left: -10000px;
+    top: 0;
+    width: 80mm;
+  }
+}
+
 @media print {
   .receipt-print {
     width: 80mm; /* Standard thermal receipt width */
@@ -160,6 +169,10 @@ html { scroll-behavior:smooth; }
 
   .receipt-print * {
     font-family: 'Courier New', monospace !important;
+  }
+
+  .receipt-print .receipt-print-actions {
+    display: none;
   }
 
   body * {

@@ -1,5 +1,27 @@
 import Stripe from 'stripe';
+import { fromZonedTime } from 'date-fns-tz';
 import { adminDb, isAdminConfigured } from '../../../lib/firebaseAdmin';
+
+const RECEIPTS_TIME_ZONE = 'America/Chicago';
+
+function getDateRange(dateValue) {
+  const fallbackDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: RECEIPTS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || ''))
+    ? String(dateValue)
+    : fallbackDate;
+  const start = fromZonedTime(`${date}T00:00:00`, RECEIPTS_TIME_ZONE);
+  const nextDay = new Date(`${date}T00:00:00Z`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  const nextDate = nextDay.toISOString().slice(0, 10);
+  const end = fromZonedTime(`${nextDate}T00:00:00`, RECEIPTS_TIME_ZONE);
+
+  return { date, start, end };
+}
 
 function toUnixSeconds(value, fallbackIso = null) {
   if (!value && !fallbackIso) return Math.floor(Date.now() / 1000);
@@ -31,13 +53,17 @@ function toUnixSeconds(value, fallbackIso = null) {
   return Math.floor(Date.now() / 1000);
 }
 
-async function listAllPaymentIntents(stripe) {
+async function listPaymentIntentsForRange(stripe, start, end) {
   const paymentIntents = [];
   let startingAfter;
 
   do {
     const page = await stripe.paymentIntents.list({
       limit: 100,
+      created: {
+        gte: Math.floor(start.getTime() / 1000),
+        lt: Math.floor(end.getTime() / 1000),
+      },
       ...(startingAfter ? { starting_after: startingAfter } : {}),
       expand: ['data.customer', 'data.charges'],
     });
@@ -62,6 +88,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    const { date, start, end } = getDateRange(req.query.date);
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
       apiVersion: '2024-06-20',
     });
@@ -70,7 +97,11 @@ export default async function handler(req, res) {
     const cashReceipts = [];
     if (isAdminConfigured && adminDb) {
       try {
-        const storedPaymentsSnapshot = await adminDb.collection('terminalCardPayments').get();
+        const storedPaymentsSnapshot = await adminDb
+          .collection('terminalCardPayments')
+          .where('createdAt', '>=', start)
+          .where('createdAt', '<', end)
+          .get();
         storedPaymentsSnapshot.forEach((docSnap) => {
           const data = docSnap.data() || {};
           const intentId = String(data.paymentIntentId || docSnap.id || '').trim();
@@ -83,7 +114,11 @@ export default async function handler(req, res) {
       }
 
       try {
-        const cashSnapshot = await adminDb.collection('cashPayments').get();
+        const cashSnapshot = await adminDb
+          .collection('cashPayments')
+          .where('createdAt', '>=', start)
+          .where('createdAt', '<', end)
+          .get();
         cashSnapshot.forEach((docSnap) => {
           const data = docSnap.data() || {};
           const receiptNumber = String(data.receiptNumber || '').trim();
@@ -138,9 +173,8 @@ export default async function handler(req, res) {
       }
     }
 
-    // Stripe returns at most 100 payment intents per request. Walk every page so
-    // older receipts do not disappear once more than 100 newer payments exist.
-    const paymentIntents = await listAllPaymentIntents(stripe);
+    // Only page through the requested day instead of the account's full history.
+    const paymentIntents = await listPaymentIntentsForRange(stripe, start, end);
 
     // Filter to only succeeded
     const succeededIntents = paymentIntents.filter(pi => pi.status === 'succeeded');
@@ -257,7 +291,7 @@ export default async function handler(req, res) {
       (a, b) => Number(b.created || 0) - Number(a.created || 0)
     );
 
-    res.status(200).json({ receipts: combinedReceipts });
+    res.status(200).json({ date, receipts: combinedReceipts });
   } catch (error) {
     console.error('Error fetching receipts:', error);
     res.status(500).json({ error: 'Failed to fetch receipts' });

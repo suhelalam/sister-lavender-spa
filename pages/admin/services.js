@@ -278,9 +278,11 @@ export default function AdminServicesPage() {
     e.preventDefault();
 
     const addOnData = {
-      id: editingAddOn
-        ? editingAddOn.id
-        : addOnForm.name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+      // Keep an existing add-on's ID when editing it. For new add-ons, let the
+      // services context generate an ID that is unique across every category.
+      // A name-only ID caused the same add-on name in a second category to
+      // overwrite the first Firestore document.
+      ...(editingAddOn ? { id: editingAddOn.id } : {}),
       name: addOnForm.name.trim(),
       category: addOnForm.category,
       price: toCents(addOnForm.price),

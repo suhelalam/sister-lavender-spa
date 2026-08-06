@@ -172,6 +172,15 @@ const getReceiptBreakdown = (transaction, services) => {
     Number.isFinite(preTipAmountFromApi) && preTipAmountFromApi >= 0
       ? Math.round(preTipAmountFromApi)
       : Math.max(0, totalCents - tipAmountCents);
+  const processingFeePercent =
+    processingFeeCents > 0 && preTipAmountCents > 0
+      ? (processingFeeCents / preTipAmountCents) * 100
+      : 0;
+  const amountBeforeTipCents = Math.max(0, totalCents - tipAmountCents);
+  const tipPercent =
+    tipAmountCents > 0 && amountBeforeTipCents > 0
+      ? (tipAmountCents / amountBeforeTipCents) * 100
+      : 0;
   const couponCode = String(transaction?.coupon_code || '').trim();
   const couponDiscountDisplay = String(transaction?.coupon_discount_display || '').trim();
   const couponPercentOff = Number(transaction?.coupon_percent_off);
@@ -191,8 +200,10 @@ const getReceiptBreakdown = (transaction, services) => {
   return {
     servicesSubtotalCents,
     processingFeeCents,
+    processingFeePercent,
     discountAmountCents,
     tipAmountCents,
+    tipPercent,
     preTipAmountCents,
     totalCents,
     couponCode,
@@ -203,13 +214,21 @@ const getReceiptBreakdown = (transaction, services) => {
 
 const normalizeNameKey = (value) => String(value || '').trim().toLowerCase();
 
+const getTodayInChicago = () =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
 export default function AdminReceiptsPage() {
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState([]);
   const [servicePriceMap, setServicePriceMap] = useState({});
-  const [dayFilter, setDayFilter] = useState('');
+  const [dayFilter, setDayFilter] = useState(getTodayInChicago);
   const [searchTerm, setSearchTerm] = useState('');
   const [receiptEmailInputs, setReceiptEmailInputs] = useState({});
   const [sendingReceiptById, setSendingReceiptById] = useState({});
@@ -235,7 +254,7 @@ export default function AdminReceiptsPage() {
     const loadTransactions = async () => {
       setLoading(true);
       try {
-        const response = await fetch('/api/admin/receipts');
+        const response = await fetch(`/api/admin/receipts?date=${encodeURIComponent(dayFilter)}`);
         if (!response.ok) {
           throw new Error('Failed to fetch receipts');
         }
@@ -249,7 +268,7 @@ export default function AdminReceiptsPage() {
     };
 
     loadTransactions();
-  }, [loadingAuth]);
+  }, [dayFilter, loadingAuth]);
 
   useEffect(() => {
     if (loadingAuth) return;
@@ -381,9 +400,9 @@ export default function AdminReceiptsPage() {
           </div>
           <div style="margin-top:10px; border-top:1px solid #ddd; padding-top:8px;">
             <div class="service">Services subtotal: ${formatCurrencyFromCents(breakdown.servicesSubtotalCents) || '$0.00'}</div>
-            <div class="service">Processing fee: ${formatCurrencyFromCents(breakdown.processingFeeCents) || '$0.00'}</div>
+            <div class="service">Processing fee${breakdown.processingFeePercent > 0 ? ` (${breakdown.processingFeePercent.toFixed(0)}%)` : ''}: ${formatCurrencyFromCents(breakdown.processingFeeCents) || '$0.00'}</div>
             <div class="service">Coupon${breakdown.couponLineLabel ? ` (${breakdown.couponLineLabel})` : ''}: -${formatCurrencyFromCents(breakdown.discountAmountCents) || '$0.00'}</div>
-            <div class="service">Tip: ${formatCurrencyFromCents(breakdown.tipAmountCents) || '$0.00'}</div>
+            <div class="service">Tip${breakdown.tipPercent > 0 ? ` (${breakdown.tipPercent.toFixed(0)}%)` : ''}: ${formatCurrencyFromCents(breakdown.tipAmountCents) || '$0.00'}</div>
             <div class="service">Pre-tip total: ${formatCurrencyFromCents(breakdown.preTipAmountCents) || '$0.00'}</div>
           </div>
           <div class="total">Total: $${total}</div>
@@ -560,12 +579,12 @@ export default function AdminReceiptsPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setDayFilter('');
+                  setDayFilter(getTodayInChicago());
                   setSearchTerm('');
                 }}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50 md:w-auto"
               >
-                Clear Filters
+                Today
               </button>
             </div>
           </div>
@@ -641,7 +660,9 @@ export default function AdminReceiptsPage() {
                     </div>
 
                     <div className="mt-2 flex items-center justify-between">
-                      <p className="text-sm text-gray-600">Processing Fee</p>
+                      <p className="text-sm text-gray-600">
+                        Processing Fee{breakdown.processingFeePercent > 0 ? ` (${breakdown.processingFeePercent.toFixed(0)}%)` : ''}
+                      </p>
                       <p className="text-sm font-medium text-gray-800">
                         {formatCurrencyFromCents(breakdown.processingFeeCents) || '$0.00'}
                       </p>
@@ -657,7 +678,9 @@ export default function AdminReceiptsPage() {
                     </div>
 
                     <div className="mt-2 flex items-center justify-between text-amber-700">
-                      <p className="text-sm">Tip</p>
+                      <p className="text-sm">
+                        Tip{breakdown.tipPercent > 0 ? ` (${breakdown.tipPercent.toFixed(0)}%)` : ''}
+                      </p>
                       <p className="text-sm font-medium">
                         {formatCurrencyFromCents(breakdown.tipAmountCents) || '$0.00'}
                       </p>

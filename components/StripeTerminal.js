@@ -2,7 +2,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 
-function ServicePickerButton({ item, selectedServices, onAdd, isAddOn = false }) {
+function ServicePickerButton({ item, selectedServices, onAdd, onQuantityChange, isAddOn = false }) {
   const variations = item.variations?.length ? item.variations : [item];
   const [selectedVariationId, setSelectedVariationId] = useState(variations[0].id);
   const selectedVariation =
@@ -88,30 +88,39 @@ function ServicePickerButton({ item, selectedServices, onAdd, isAddOn = false })
       <span className="flex-none pr-1 text-sm font-bold text-purple-800">
         ${(selectedVariation.amount / 100).toFixed(2)}
       </span>
-      {(selectedQuantity > 0 || !hasRequiredMainService) && (
-        <span
-          className={`absolute right-1.5 top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold shadow-sm ${
-            selectedQuantity
-              ? 'bg-purple-700 text-white'
-              : 'bg-stone-200 text-stone-600'
-          }`}
-          aria-label={
-            !hasRequiredMainService
-              ? 'Select a main service from this category first'
-              : selectedQuantity
-                ? `${selectedQuantity} selected`
-                : undefined
-          }
-        >
-          {!hasRequiredMainService ? '🔒' : selectedQuantity}
+      {selectedQuantity > 0 ? (
+        <span className="absolute right-1.5 top-1.5 flex items-center overflow-hidden rounded-full bg-purple-700 text-white shadow-sm">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onQuantityChange(selectedVariation.id, selectedQuantity - 1);
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+            className="flex h-6 w-7 items-center justify-center border-r border-purple-500 text-sm font-bold transition hover:bg-purple-800"
+            aria-label={`Remove one ${item.name}`}
+          >
+            −
+          </button>
+          <span className="flex h-6 min-w-[24px] items-center justify-center px-1.5 text-[10px] font-bold" aria-label={`${selectedQuantity} selected`}>
+            {selectedQuantity}
+          </span>
         </span>
-      )}
+      ) : !hasRequiredMainService ? (
+        <span
+          className="absolute right-1.5 top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-stone-200 px-1.5 text-[10px] font-bold text-stone-600 shadow-sm"
+          aria-label="Select a main service from this category first"
+        >
+          🔒
+        </span>
+      ) : null}
     </div>
   );
 }
 
 export default function StripeTerminal() {
   const [amount, setAmount] = useState('');
+  const [customAmount, setCustomAmount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [stripeItems, setStripeItems] = useState([]);
   const [productSearch, setProductSearch] = useState('');
@@ -279,8 +288,9 @@ export default function StripeTerminal() {
     (sum, item) => sum + (item.amount / 100) * item.quantity,
     0
   );
-  const manualAmount = parseFloat(amount) || 0;
-  const primaryAmount = selectedServices.length > 0 ? selectedServicesAmount : manualAmount;
+  const enteredCustomAmount = parseFloat(amount) || 0;
+  const manualAmount = customAmount;
+  const primaryAmount = selectedServicesAmount + manualAmount;
 
   // ----- Amount math -----
   const baseAmount = primaryAmount;
@@ -298,13 +308,10 @@ export default function StripeTerminal() {
     return couponAppliesToProductIds.has(service.product_id) ? sum + serviceLineTotal : sum;
   }, 0);
 
-  // Coupons apply to selected services. For manual-only sales, unrestricted coupons can apply.
+  // Product-restricted coupons only apply to matching services. Unrestricted
+  // coupons also apply to any custom charge included in the sale.
   const couponEligibleAmount =
-    selectedServices.length > 0
-      ? eligibleSelectedServicesAmount
-      : hasCouponProductRestrictions
-        ? 0
-        : manualAmount;
+    eligibleSelectedServicesAmount + (hasCouponProductRestrictions ? 0 : manualAmount);
 
   const percentDiscountAmount =
     selectedCoupon?.discount_type === 'percent'
@@ -421,7 +428,7 @@ export default function StripeTerminal() {
 
   useEffect(() => {
     setCartPreviewShown(false);
-  }, [selectedServices, selectedReaderId, includeFee, selectedCouponId, amount, redeemRewards]);
+  }, [selectedServices, selectedReaderId, includeFee, selectedCouponId, customAmount, redeemRewards]);
 
   useEffect(() => {
     if (!canRedeemRewards) setRedeemRewards(false);
@@ -500,6 +507,7 @@ export default function StripeTerminal() {
 
   const resetForm = () => {
     setAmount('');
+    setCustomAmount(0);
     setProductSearch('');
     setActiveServiceCategory(null);
     setSelectedServices([]);
@@ -695,24 +703,22 @@ export default function StripeTerminal() {
 
     setIsLoading(true);
     try {
-      const baseServiceLines =
-        selectedServices.length > 0
-          ? selectedServices.map((service) => ({
-              name: service.variation_name
-                ? `${service.name} — ${service.variation_name}`
-                : service.name,
-              amount: Math.max(0, Math.round(Number(service.amount || 0))),
-              quantity: Math.max(1, Math.round(Number(service.quantity || 1))),
-            }))
-          : manualAmount > 0
-            ? [
-                {
-                  name: 'Custom amount',
-                  amount: Math.max(0, Math.round(manualAmount * 100)),
-                  quantity: 1,
-                },
-              ]
-            : [];
+      const baseServiceLines = [
+        ...selectedServices.map((service) => ({
+          name: service.variation_name
+            ? `${service.name} — ${service.variation_name}`
+            : service.name,
+          amount: Math.max(0, Math.round(Number(service.amount || 0))),
+          quantity: Math.max(1, Math.round(Number(service.quantity || 1))),
+        })),
+        ...(manualAmount > 0
+          ? [{
+              name: 'Custom amount',
+              amount: Math.max(0, Math.round(manualAmount * 100)),
+              quantity: 1,
+            }]
+          : []),
+      ];
 
       const servicesForReceipt = baseServiceLines;
 
@@ -740,6 +746,7 @@ export default function StripeTerminal() {
 
       // Set receipt data for display
       setReceipt({
+        paymentMethod: 'cash',
         receiptNumber: data.receiptNumber,
         timestamp: new Date(data.timestamp).toLocaleString(),
         amount: displayAmount,
@@ -747,6 +754,10 @@ export default function StripeTerminal() {
         discountAmount: discountAmount,
         rewardDiscountAmount,
         rewardPointsRedeemed: rewardPointsToRedeem,
+        processingFeeAmount: 0,
+        processingFeePercent: 0,
+        tipAmount: 0,
+        tipPercent: 0,
         subtotal: amountAfterRewards,
         customerName: selectedCustomer?.name || null,
         customerEmail: selectedCustomer?.email || null,
@@ -784,24 +795,22 @@ export default function StripeTerminal() {
 
     setIsLoading(true);
     try {
-      const baseServiceLines =
-        selectedServices.length > 0
-          ? selectedServices.map((service) => ({
-              name: service.variation_name
-                ? `${service.name} — ${service.variation_name}`
-                : service.name,
-              amount: Math.max(0, Math.round(Number(service.amount || 0))),
-              quantity: Math.max(1, Math.round(Number(service.quantity || 1))),
-            }))
-          : manualAmount > 0
-            ? [
-                {
-                  name: 'Custom amount',
-                  amount: Math.max(0, Math.round(manualAmount * 100)),
-                  quantity: 1,
-                },
-              ]
-            : [];
+      const baseServiceLines = [
+        ...selectedServices.map((service) => ({
+          name: service.variation_name
+            ? `${service.name} — ${service.variation_name}`
+            : service.name,
+          amount: Math.max(0, Math.round(Number(service.amount || 0))),
+          quantity: Math.max(1, Math.round(Number(service.quantity || 1))),
+        })),
+        ...(manualAmount > 0
+          ? [{
+              name: 'Custom amount',
+              amount: Math.max(0, Math.round(manualAmount * 100)),
+              quantity: 1,
+            }]
+          : []),
+      ];
 
       const linesWithCustomCharge = baseServiceLines;
 
@@ -899,6 +908,7 @@ export default function StripeTerminal() {
       const paymentResult = await waitForTerminalPaymentResult(piData.payment_intent_id);
 
       if (paymentResult === 'succeeded') {
+        let finalizedPayment = null;
         try {
           const finalizeResponse = await fetch('/api/finalize-terminal-payment', {
             method: 'POST',
@@ -907,6 +917,7 @@ export default function StripeTerminal() {
           });
           const finalizeData = await finalizeResponse.json();
           if (!finalizeResponse.ok) throw new Error(finalizeData.error || 'Could not record payment rewards.');
+          finalizedPayment = finalizeData;
           if (finalizeData.rewards && selectedCustomer) {
             setSelectedCustomer((customer) => ({ ...customer, pointsBalance: finalizeData.rewards.pointsBalance }));
             setPaymentStatus({ type: 'success', text: `Payment successful. ${finalizeData.rewards.pointsEarned} points earned${finalizeData.rewards.pointsRedeemed ? ` and ${finalizeData.rewards.pointsRedeemed} points redeemed` : ''}.` });
@@ -918,6 +929,28 @@ export default function StripeTerminal() {
 
         await clearReaderDisplay(selectedReaderId);
         if (!selectedCustomer) setPaymentStatus({ type: 'success', text: 'Payment successful.' });
+        setReceipt({
+          paymentMethod: 'card',
+          receiptNumber: piData.payment_intent_id,
+          timestamp: new Date().toLocaleString(),
+          amount: Number(finalizedPayment?.total_amount_cents ?? finalChargeAmount) / 100,
+          services: baseServiceLines,
+          discountAmount,
+          rewardDiscountAmount,
+          rewardPointsRedeemed: rewardPointsToRedeem,
+          processingFeeAmount: feeAmountCents / 100,
+          processingFeePercent:
+            amountAfterDiscountCents > 0 ? (feeAmountCents / amountAfterDiscountCents) * 100 : 0,
+          tipAmount: Number(finalizedPayment?.tip_amount_cents || 0) / 100,
+          tipPercent:
+            Number(finalizedPayment?.tip_amount_cents || 0) > 0 &&
+            Number(finalizedPayment?.total_amount_cents || 0) > Number(finalizedPayment?.tip_amount_cents || 0)
+              ? (Number(finalizedPayment.tip_amount_cents) /
+                  (Number(finalizedPayment.total_amount_cents) - Number(finalizedPayment.tip_amount_cents))) * 100
+              : 0,
+          customerName: selectedCustomer?.name || null,
+          customerEmail: selectedCustomer?.email || null,
+        });
         clearTerminalUiState();
         resetForm();
         return;
@@ -961,8 +994,10 @@ export default function StripeTerminal() {
 
       {/* Receipt Display */}
       {receipt && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <h3 className="text-lg font-bold text-green-700 mb-2">Cash Payment Receipt</h3>
+        <div className="receipt-print">
+          <h3 className="mb-2 text-lg font-bold text-green-700">
+            {receipt.paymentMethod === 'card' ? 'Card Payment Receipt' : 'Cash Payment Receipt'}
+          </h3>
           <div className="space-y-1 text-sm">
             <p><strong>Receipt #:</strong> {receipt.receiptNumber}</p>
             <p><strong>Date/Time:</strong> {receipt.timestamp}</p>
@@ -977,7 +1012,7 @@ export default function StripeTerminal() {
             {receipt.services.map((service, idx) => (
               <div key={idx} className="flex justify-between">
                 <span>{service.name} x {service.quantity}</span>
-                <span>${(service.amount / 100).toFixed(2)}</span>
+                <span>${((service.amount * service.quantity) / 100).toFixed(2)}</span>
               </div>
             ))}
             {receipt.discountAmount > 0 && (
@@ -992,24 +1027,24 @@ export default function StripeTerminal() {
                 <span>-${receipt.rewardDiscountAmount.toFixed(2)}</span>
               </div>
             )}
+            {receipt.processingFeeAmount > 0 && (
+              <div className="flex justify-between">
+                <span>Processing fee ({receipt.processingFeePercent.toFixed(0)}%)</span>
+                <span>${receipt.processingFeeAmount.toFixed(2)}</span>
+              </div>
+            )}
+            {receipt.tipAmount > 0 && (
+              <div className="flex justify-between">
+                <span>Tip ({receipt.tipPercent.toFixed(0)}%)</span>
+                <span>${receipt.tipAmount.toFixed(2)}</span>
+              </div>
+            )}
             <hr className="my-2" />
             <div className="flex justify-between font-bold text-lg">
               <span>Total Paid:</span>
               <span>${receipt.amount.toFixed(2)}</span>
             </div>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="w-full mt-3 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700"
-          >
-            Print Receipt
-          </button>
-          <button
-            onClick={() => setReceipt(null)}
-            className="w-full mt-2 bg-gray-300 text-gray-800 px-3 py-2 rounded text-sm hover:bg-gray-400"
-          >
-            Close Receipt
-          </button>
         </div>
       )}
 
@@ -1297,7 +1332,7 @@ export default function StripeTerminal() {
                     </div>
                     <div className="grid gap-2 sm:grid-cols-3">
                       {activeServiceGroup.addOnItems.map((item) => (
-                        <ServicePickerButton key={item.id} item={item} selectedServices={selectedServices} onAdd={addService} isAddOn />
+                        <ServicePickerButton key={item.id} item={item} selectedServices={selectedServices} onAdd={addService} onQuantityChange={updateServiceQuantity} isAddOn />
                       ))}
                     </div>
                   </section>
@@ -1308,7 +1343,7 @@ export default function StripeTerminal() {
                     <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Services</h3>
                     <div className="grid gap-2 sm:grid-cols-3">
                       {activeServiceGroup.regularItems.map((item) => (
-                        <ServicePickerButton key={item.id} item={item} selectedServices={selectedServices} onAdd={addService} />
+                        <ServicePickerButton key={item.id} item={item} selectedServices={selectedServices} onAdd={addService} onQuantityChange={updateServiceQuantity} />
                       ))}
                     </div>
                   </section>
@@ -1340,26 +1375,55 @@ export default function StripeTerminal() {
           </div>
         )}
 
-        {selectedServices.length === 0 && (
-          <div className="mb-2 flex items-center gap-3 rounded-lg border bg-stone-50 p-2">
-            <label htmlFor="custom-sale-amount" className="flex-none text-sm font-medium text-stone-700">
-              Custom sale
-            </label>
-            <div className="relative min-w-0 flex-1">
-              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-500">$</span>
-              <input
-                id="custom-sale-amount"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0.50"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="w-full rounded-lg border bg-white py-2 pl-7 pr-3 text-base"
-                disabled={isLoading || isCanceling}
-              />
+        <div className="mb-2 flex items-center gap-3 rounded-lg border bg-stone-50 p-2">
+          <label htmlFor="custom-sale-amount" className="flex-none text-sm font-medium text-stone-700">
+            Custom sale
+          </label>
+          <div className="relative min-w-0 flex-1">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-500">$</span>
+            <input
+              id="custom-sale-amount"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.50"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+              className="w-full rounded-lg border bg-white py-2 pl-7 pr-3 text-base"
+              disabled={isLoading || isCanceling}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (enteredCustomAmount < 0.5) return;
+              setCustomAmount((current) =>
+                Math.round((current + enteredCustomAmount) * 100) / 100
+              );
+              setAmount('');
+            }}
+            disabled={enteredCustomAmount < 0.5 || isLoading || isCanceling}
+            className="flex-none rounded-lg bg-purple-700 px-4 py-2 text-sm font-bold text-white transition hover:bg-purple-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+          >
+            Add
+          </button>
+        </div>
+
+        {manualAmount > 0 && (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-purple-200 bg-purple-50 p-2.5 text-sm">
+            <div>
+              <span className="font-medium text-purple-950">Custom sale added</span>
+              <span className="ml-2 font-bold text-purple-800">${manualAmount.toFixed(2)}</span>
             </div>
+            <button
+              type="button"
+              onClick={() => setCustomAmount(0)}
+              disabled={isLoading || isCanceling}
+              className="rounded border border-purple-300 bg-white px-3 py-1 font-semibold text-purple-700 disabled:opacity-50"
+            >
+              Remove
+            </button>
           </div>
         )}
 
@@ -1458,6 +1522,19 @@ export default function StripeTerminal() {
 
       {/* Payment Buttons */}
       <div className="terminal-actions space-y-2">
+        {receipt && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-gradient-to-r from-white to-purple-50 px-4 py-2 text-xs font-bold text-purple-800 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md active:translate-y-0"
+            >
+              <span aria-hidden="true">🖨️</span>
+              Print receipt
+            </button>
+          </div>
+        )}
+
         {paymentStatus && (
           <div
             className={`p-3 rounded text-sm ${
@@ -1475,7 +1552,7 @@ export default function StripeTerminal() {
         {baseAmount > 0 && (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-2">
             <div className="flex justify-between text-xs text-blue-900">
-              <span>Services</span>
+              <span>Subtotal</span>
               <span>${primaryAmount.toFixed(2)}</span>
             </div>
             {discountAmount > 0 && (
