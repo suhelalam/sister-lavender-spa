@@ -1446,19 +1446,43 @@ export default function StripeTerminal() {
               </button>
             </div>
           ) : (
-            <select
-              value={selectedCouponId}
-              onChange={(e) => setSelectedCouponId(e.target.value)}
-              className="w-full p-3 border rounded-lg"
-              disabled={isLoading || isCanceling}
-            >
-              <option value="">No coupon</option>
-              {coupons.map((coupon) => (
-                <option key={coupon.id} value={coupon.id}>
-                  {coupon.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={() => setSelectedCouponId('')}
+                disabled={isLoading || isCanceling}
+                aria-pressed={!selectedCouponId}
+                className={`min-h-[38px] flex-none whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition disabled:opacity-50 ${
+                  !selectedCouponId
+                    ? 'border-purple-600 bg-purple-700 text-white shadow-sm'
+                    : 'border-stone-200 bg-white text-stone-600 hover:border-purple-300 hover:bg-purple-50'
+                }`}
+              >
+                No coupon
+              </button>
+              {coupons.slice(0, 5).map((coupon) => {
+                const selected = selectedCouponId === coupon.id;
+                return (
+                  <button
+                    key={coupon.id}
+                    type="button"
+                    onClick={() => setSelectedCouponId(selected ? '' : coupon.id)}
+                    disabled={isLoading || isCanceling}
+                    aria-pressed={selected}
+                    className={`min-h-[38px] flex-none whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-left transition disabled:opacity-50 ${
+                      selected
+                        ? 'border-purple-600 bg-purple-700 text-white shadow-sm'
+                        : 'border-purple-200 bg-white text-purple-900 hover:border-purple-400 hover:bg-purple-50'
+                    }`}
+                  >
+                    <span className="text-[11px] font-bold">{coupon.code || coupon.name}</span>
+                    <span className={`ml-1 text-[9px] ${selected ? 'text-purple-100' : 'text-purple-600'}`}>
+                      · {coupon.discount_display}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
 
