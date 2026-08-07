@@ -21,6 +21,41 @@ function bookingCustomer(doc) {
   };
 }
 
+function dateKeyInTimeZone(value, timeZone = 'America/Chicago') {
+  if (!value) return '';
+  const rawValue = String(value);
+  // Firestore also contains walk-in timestamps saved as local calendar time.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(rawValue)) return rawValue.slice(0, 10);
+  const date = value?.toDate?.() || new Date(value);
+  if (Number.isNaN(date.getTime())) return rawValue.slice(0, 10);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+async function findTodaysBookings(digits) {
+  if (digits.length < 4) return [];
+  const today = dateKeyInTimeZone(new Date());
+  const snapshot = await adminDb
+    .collection('customerBookings')
+    .where('status', '==', 'active')
+    .limit(500)
+    .get();
+
+  return snapshot.docs
+    .map(bookingCustomer)
+    .filter((booking) => {
+      const bookingPhone = normalizePhone(booking.phone);
+      const phoneMatches = digits.length === 4
+        ? bookingPhone.endsWith(digits)
+        : bookingPhone === digits;
+      return phoneMatches && dateKeyInTimeZone(booking.appointmentAt) === today;
+    })
+    .sort((a, b) => String(a.appointmentAt || '').localeCompare(String(b.appointmentAt || '')));
+}
+
 export default async function handler(req, res) {
   if (!isAdminConfigured || !adminDb) return res.status(503).json({ error: 'Customer database is not configured.' });
   if (req.method === 'POST') {
@@ -29,6 +64,7 @@ export default async function handler(req, res) {
   }
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   const value = String(req.query.q || req.query.last4 || '').trim().toLowerCase();
+  const profilesOnly = req.query.profilesOnly === '1';
   if (!value) return res.status(400).json({ error: 'Search value is required.' });
   try {
     let snapshot;
@@ -41,9 +77,22 @@ export default async function handler(req, res) {
       return { id: doc.id, maskedName: maskName(data.name), name: data.name, phone: data.phone, email: data.email, pointsBalance: data.pointsBalance || 0, source: 'customer' };
     });
 
+    // A kiosk lookup is visit-first: today's appointment carries the booking ID
+    // and booked services that must be checked in, even when a CRM profile exists.
+    const todaysBookings = profilesOnly ? [] : await findTodaysBookings(digits);
+    if (todaysBookings.length) {
+      const customersByPhone = new Map(customers.map((customer) => [normalizePhone(customer.phone), customer]));
+      customers = todaysBookings.map((booking) => {
+        const profile = customersByPhone.get(normalizePhone(booking.phone));
+        return profile
+          ? { ...profile, ...booking, id: profile.id, pointsBalance: profile.pointsBalance }
+          : booking;
+      });
+    }
+
     // Existing appointments predate the CRM collection. Reuse their customer
     // details instead of treating an already-booked guest as a new customer.
-    if (customers.length === 0 && digits.length >= 4) {
+    if (!profilesOnly && customers.length === 0 && digits.length >= 4) {
       const bookingsSnapshot = await adminDb
         .collection('customerBookings')
         .where('status', '==', 'active')
@@ -71,6 +120,13 @@ export default async function handler(req, res) {
         return true;
       }).slice(0, 10);
     }
-    return res.json({ customers, requiresFullPhone: digits.length === 4 && customers.length > 1 });
+    const uniquePhones = new Set(customers.map((customer) => normalizePhone(customer.phone)).filter(Boolean));
+    return res.json({
+      customers,
+      hasTodaysAppointment: todaysBookings.length > 0,
+      // Multiple appointments for one guest are safe to display; different phone
+      // numbers sharing the last four digits require full-phone verification.
+      requiresFullPhone: digits.length === 4 && uniquePhones.size > 1,
+    });
   } catch (error) { return res.status(500).json({ error: error.message }); }
 }

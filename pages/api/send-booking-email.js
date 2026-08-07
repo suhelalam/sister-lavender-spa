@@ -308,7 +308,7 @@ export default async function handler(req, res) {
       const totalMinutes = totalDuration / (60 * 1000);
 
       const event = {
-        summary: `Appointment: ${firstName} ${lastName}`,
+        summary: `${firstName} ${lastName}`,
         description: `
 ═══════════════════════════
 👤 CLIENT INFORMATION 👤
