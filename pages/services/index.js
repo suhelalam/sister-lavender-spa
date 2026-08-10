@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
-import { ChevronDown } from 'lucide-react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { ArrowRight, ChevronDown } from 'lucide-react';
 import { useServices } from '../../context/ServicesContext';
 import { useCart } from '../../context/CartContext';
 import {
@@ -51,6 +53,44 @@ const getPrimaryVariation = (addOn) => {
     currency: 'USD',
   };
 };
+
+const browsingCategories = [
+  { title: 'Head Spa Treatments', categories: ['Head Spa Treatments'], kicker: 'Scalp care & relaxation', description: 'Scalp cleansing, steam, massage, and restorative rituals for deep relaxation.', image: '/images/head.jpg', href: '/services/head-spa' },
+  { title: 'Body Massage Treatments', categories: ['Body Massage Treatments'], kicker: 'Rest & recovery', description: 'Personalized massage for relaxation, muscle tension, circulation, and recovery.', image: '/images/bodyMassage.jpg', href: '/services/body-massage' },
+  { title: 'Foot Care', categories: ['Foot Care'], kicker: 'Care from heel to toe', description: 'Pedicures, exfoliation, hydration, and detailed care for refreshed feet.', image: '/images/footCare.jpg', href: '/services/foot-care' },
+  { title: 'Manicure Services', categories: ['Manicure Services'], kicker: 'Polished & precise', description: 'Thoughtful nail shaping, cuticle care, and polish in a calm spa setting.', image: '/images/manicure.jpg', href: '/services/manicure' },
+  { title: 'Couples & Side-by-Side', categories: ['Side-by-Side Services', 'Couples Services'], kicker: 'Relax together', description: 'Share head spa or massage treatments together for an unhurried experience for two.', image: '/images/Firefly_Full-body spa ritual scene combining head and body massage. A tranquil environment wi 34456.jpg', href: '/couples-services' },
+];
+
+function ServicesLanding({ services, loading }) {
+  const availableCategories = browsingCategories.filter((category) => category.categories.some((categoryName) =>
+    services.some((service) => !service.isAddOn && normalizeCategoryText(service.category) === normalizeCategoryText(categoryName))
+  ));
+  return <main>
+    <section className="bg-[#f0ebe4] px-4 py-14 text-center sm:py-20">
+      <p className="eyebrow">Sister Lavender Spa · Chicago</p>
+      <h1 className="mx-auto mt-3 max-w-3xl font-display text-4xl leading-tight text-[#423846] sm:text-6xl">Spa services & pricing</h1>
+      <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-stone-600">Explore our current head spa, massage, nail, foot care, and couples experiences. Each category includes treatment details, durations, and prices.</p>
+      <Link href="/booking" className="button-primary mt-7 inline-flex">Book an appointment <ArrowRight size={17}/></Link>
+    </section>
+    <section className="section" aria-labelledby="service-categories-heading">
+      <div className="section-heading"><div><p className="eyebrow">Explore treatments</p><h2 id="service-categories-heading">Choose a service category.</h2></div></div>
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {loading ? Array.from({length:3}).map((_,index)=><div key={index} className="h-[470px] animate-pulse rounded-[1.4rem] bg-stone-100"/>) : availableCategories.map((category)=><article key={category.href} className="group overflow-hidden rounded-[1.4rem] border border-[#e3dad1] bg-white shadow-[0_14px_40px_rgba(65,49,43,0.09)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_22px_55px_rgba(65,49,43,0.16)]">
+          <Link href={category.href} className="block h-full" aria-label={`View ${category.title} services and pricing`}>
+            <div className="relative h-64 overflow-hidden sm:h-72">
+              <Image src={category.image} alt={`${category.title} at Sister Lavender Spa in Chicago`} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" className="object-cover transition duration-700 group-hover:scale-105"/>
+              <div className="absolute inset-0 bg-gradient-to-t from-stone-950/55 via-transparent to-transparent"/>
+              <span className="absolute bottom-4 left-4 rounded-full border border-white/30 bg-white/90 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#594660] backdrop-blur-sm">{category.kicker}</span>
+            </div>
+            <div className="flex min-h-[205px] flex-col p-6"><h3 className="font-display text-2xl leading-tight text-[#423846]">{category.title}</h3><p className="mt-3 flex-1 text-sm leading-6 text-stone-600">{category.description}</p><span className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-[#66516f]">View services & pricing <ArrowRight size={16} className="transition-transform group-hover:translate-x-1"/></span></div>
+          </Link>
+        </article>)}
+      </div>
+    </section>
+    <section className="final-cta"><p className="eyebrow">Ready when you are</p><h2>Choose your treatment and appointment time.</h2><div className="mt-6 flex justify-center"><Link href="/booking" className="button-light">Book now</Link></div></section>
+  </main>;
+}
 
 export default function Services() {
   const { activeServices: services, activeAddOns: addOns, loading } = useServices();
@@ -211,6 +251,8 @@ export default function Services() {
   const toggleCategory = (categorySlug) => {
     setExpandedCategory((current) => (current === categorySlug ? null : categorySlug));
   };
+
+  if (router.pathname === '/services') return <ServicesLanding services={services} loading={loading} />;
 
   if (loading) {
     return (

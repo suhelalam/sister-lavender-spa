@@ -13,9 +13,9 @@ const routeSeoMap = {
     keywords: 'chicago spa, head spa chicago, massage chicago, manicure chicago, foot care chicago, wellness spa chicago, sister lavender spa, 2706 w chicago ave',
   },
   '/services': {
-    title: 'Spa Services in Chicago',
-    description: 'Browse all Sister Lavender Spa services in Chicago including head spa, massage therapy, cupping therapy, body harmony, manicure, and foot care treatments.',
-    keywords: 'spa services chicago, chicago massage therapy, chicago head spa services, manicure chicago, cupping therapy chicago, foot care spa chicago',
+    title: 'Spa Services & Pricing in Chicago',
+    description: 'Explore current pricing and treatment categories at Sister Lavender Spa in Chicago, including head spa, massage, cupping, manicures, foot care, and couples services.',
+    keywords: 'spa services and pricing chicago, chicago spa prices, head spa pricing chicago, massage prices chicago, manicure chicago, couples spa chicago',
   },
   '/services/head-spa': {
     title: 'Head Spa Services in Chicago',
@@ -76,6 +76,26 @@ const routeSeoMap = {
     title: 'Book a Spa Appointment in Chicago',
     description: 'Book your Sister Lavender Spa appointment online for head spa, massage, manicure, and wellness treatments in Chicago.',
     keywords: 'book spa appointment chicago, online spa booking chicago, head spa booking, massage booking chicago',
+  },
+  '/couples-services': {
+    title: 'Couples Spa Services in Chicago',
+    description: 'Explore side-by-side couples head spa and massage experiences at Sister Lavender Spa in Chicago for date days, anniversaries, and relaxing time together.',
+    keywords: 'couples spa chicago, couples massage chicago, couples head spa chicago, side by side spa treatments',
+  },
+  '/membership-rewards': {
+    title: 'Lavender Spa Rewards',
+    description: 'Learn how Lavender Rewards members earn points on eligible spa services and redeem rewards at Sister Lavender Spa in Chicago.',
+    keywords: 'spa rewards chicago, massage rewards program, head spa loyalty program, lavender rewards',
+  },
+  '/about': {
+    title: 'About Sister Lavender Spa in Chicago',
+    description: 'Learn about Sister Lavender Spa and our thoughtful approach to head spa, massage, nail care, couples treatments, and wellness in West Town Chicago.',
+    keywords: 'about sister lavender spa, west town chicago spa, chicago wellness spa',
+  },
+  '/group-events': {
+    title: 'Spa Group Events in Chicago',
+    description: 'Plan a relaxing spa group event in Chicago for birthdays, bridal celebrations, friends, teams, and other special occasions.',
+    keywords: 'spa party chicago, group spa chicago, bridal spa day chicago, birthday spa event',
   },
   '/select-time': {
     title: 'Select Appointment Time',

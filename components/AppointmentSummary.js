@@ -16,8 +16,8 @@ export default function AppointmentSummary({ selectedSlot }) {
     // server state can incorrectly erase a valid shared-service URL.
     if (!isClient || typeof window === 'undefined') return;
 
-    // Only the main services page supports service share links.
-    if (window.location.pathname !== '/services') return;
+    // Only the booking page supports service share links.
+    if (window.location.pathname !== '/booking') return;
 
     const serviceCounts = items
       .filter((item) => !item.isAddOn)

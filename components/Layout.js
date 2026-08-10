@@ -199,7 +199,7 @@ export default function Layout({ children }) {
           {/* Desktop Book Now + Cart */}
           <div className="hidden lg:flex items-center space-x-4">
             <Link
-              href="/services"
+              href="/booking"
               className="button-primary"
             >
               Book Now
@@ -236,14 +236,14 @@ export default function Layout({ children }) {
                 href={href}
                 onClick={() => setMenuOpen(false)}
                 className={`block font-medium ${
-                  pathname.startsWith(href) ? 'text-purple-600 underline' : ''
+                  (href === '/' ? pathname === '/' : pathname.startsWith(href)) ? 'text-purple-600 underline' : ''
                 }`}
               >
                 {label}
               </Link>
             ))}
             <Link
-              href="/services"
+              href="/booking"
               onClick={() => setMenuOpen(false)}
               className="block mt-2 bg-purple-600 text-white px-4 py-2 rounded-full text-center"
             >

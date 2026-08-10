@@ -1,2 +1,47 @@
-import EditorialPage from '../components/EditorialPage';
-export default function Couples(){return <EditorialPage eyebrow="Together, unhurried" title="Couples spa experiences" intro="Share a quiet reset with side-by-side head spa, massage, or a thoughtfully paired combination in Chicago." image="/images/Firefly_Full-body spa ritual scene combining head and body massage. A tranquil environment wi 34456.jpg"><h2>Make your time together feel different.</h2><p>Choose a couples head spa, couples massage, or combine scalp and body care for a longer ritual. Our team will help coordinate timing, pressure preferences, and service details for both guests.</p><h3>Perfect for</h3><p>Anniversaries, birthdays, date days, bridal celebrations, or simply making time to reconnect. Pricing and duration are shown in our live service menu.</p><h3>Before you arrive</h3><p>Please book both guests and share any allergies, injuries, pregnancy status, or areas to avoid during check-in so we can tailor each service safely.</p></EditorialPage>}
+'use client';
+
+import Image from 'next/image';
+import Link from 'next/link';
+import { ArrowRight, Heart, Sparkles } from 'lucide-react';
+import ServiceCard from '../components/ServiceCard';
+import { useServices } from '../context/ServicesContext';
+
+const normalizeCategory = (value = '') => String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+const couplesCategories = new Set(['Side-by-Side Services', 'Couples Services'].map(normalizeCategory));
+
+export default function CouplesServices() {
+  const { activeServices: services, loading } = useServices();
+  const couplesServices = services.filter((service) =>
+    !service.isAddOn && couplesCategories.has(normalizeCategory(service.category))
+  );
+
+  return <main>
+    <section className="grid min-h-[540px] bg-[#f0ebe4] md:grid-cols-2">
+      <div className="flex flex-col justify-center p-8 md:p-14 lg:pl-[max(4rem,calc((100vw-1200px)/2))]">
+        <p className="eyebrow">Together, unhurried</p>
+        <h1 className="mt-3 max-w-xl font-display text-5xl leading-[0.98] text-[#423846] md:text-6xl">Couples & side-by-side spa services</h1>
+        <p className="mt-6 max-w-xl text-base leading-7 text-stone-600">Share a quiet reset with side-by-side head spa and massage experiences in Chicago. Browse current treatments, durations, and pricing below.</p>
+        <a href="#couples-service-menu" className="button-primary mt-7 w-fit">Explore couples services <ArrowRight size={17}/></a>
+      </div>
+      <div className="relative min-h-[380px]">
+        <Image src="/images/Firefly_Full-body spa ritual scene combining head and body massage. A tranquil environment wi 34456.jpg" alt="Couples enjoying side-by-side spa treatments at Sister Lavender Spa in Chicago" fill priority className="object-cover" sizes="(max-width: 768px) 100vw, 50vw"/>
+        <div className="absolute inset-0 bg-gradient-to-t from-stone-950/25 to-transparent"/>
+      </div>
+    </section>
+
+    <section id="couples-service-menu" className="section scroll-mt-24" aria-labelledby="couples-menu-heading">
+      <div className="section-heading">
+        <div><p className="eyebrow">For two</p><h2 id="couples-menu-heading">Choose your shared experience.</h2><p className="mt-4 max-w-2xl leading-7 text-stone-600">Add a service to your appointment, then continue to booking to choose your preferred date and time.</p></div>
+        <Link href="/booking" className="button-secondary whitespace-nowrap">Continue to booking <ArrowRight size={16}/></Link>
+      </div>
+
+      {loading ? <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{Array.from({length:3}).map((_,index)=><div key={index} className="h-[520px] animate-pulse rounded-[1.25rem] bg-stone-100"/>)}</div> : couplesServices.length > 0 ? <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{couplesServices.map((service)=><ServiceCard key={service.id} service={service}/>)}</div> : <div className="rounded-2xl border border-[#e3dad1] bg-white p-8 text-center shadow-sm"><Sparkles className="mx-auto text-[#806b88]"/><h3 className="mt-3 font-display text-2xl text-[#423846]">Couples services are being refreshed.</h3><p className="mx-auto mt-2 max-w-lg text-stone-600">Please call us for current side-by-side availability, or explore our individual services.</p><div className="mt-5 flex flex-wrap justify-center gap-3"><a href="tel:+13129003131" className="button-primary">Call (312) 900-3131</a><Link href="/services" className="button-secondary">Browse services</Link></div></div>}
+    </section>
+
+    <section className="bg-[#ede5ee] px-5 py-16">
+      <div className="mx-auto grid max-w-5xl gap-5 md:grid-cols-3">
+        {[['Perfect for','Anniversaries, birthdays, date days, bridal celebrations, or simply making time to reconnect.'],['Thoughtfully coordinated','Our team coordinates service timing so you can settle in and enjoy the experience together.'],['Prepared for you','Share allergies, injuries, pregnancy status, pressure preferences, or areas to avoid during check-in.']].map(([title,text])=><article key={title} className="rounded-2xl bg-white/80 p-6 shadow-sm"><Heart size={20} className="text-[#806b88]"/><h2 className="mt-4 font-display text-2xl text-[#423846]">{title}</h2><p className="mt-3 text-sm leading-6 text-stone-600">{text}</p></article>)}
+      </div>
+    </section>
+  </main>;
+}
