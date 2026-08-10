@@ -137,6 +137,10 @@ export default async function handler(req, res) {
             0,
             Math.round(Number(data.discountAmount || 0) * 100)
           );
+          const rewardDiscountAmountCents = Math.max(
+            0,
+            Math.round(Number(data.rewardDiscountAmount || 0) * 100)
+          );
           const createdUnixSeconds = toUnixSeconds(data.createdAt, data.timestamp);
 
           cashReceipts.push({
@@ -162,6 +166,8 @@ export default async function handler(req, res) {
             coupon_currency: '',
             coupon_discount_display: '',
             discount_amount_cents: discountAmountCents,
+            reward_points_redeemed: Math.max(0, Math.round(Number(data.rewardPointsRedeemed || 0))),
+            reward_discount_amount_cents: rewardDiscountAmountCents,
             processing_fee_amount_cents: 0,
             tip_amount_cents: 0,
             pre_tip_amount_cents: amountCents,
@@ -279,6 +285,12 @@ export default async function handler(req, res) {
           coupon_discount_display:
             storedPayment?.couponDiscountDisplay || metadata.coupon_discount_display || '',
           discount_amount_cents: discountAmountCents,
+          reward_points_redeemed: Math.max(0, Math.round(Number(
+            storedPayment?.rewardPointsToRedeem ?? metadata.reward_points_to_redeem ?? 0
+          ))),
+          reward_discount_amount_cents: Math.max(0, Math.round(Number(
+            storedPayment?.rewardDiscountAmountCents ?? metadata.reward_discount_amount_cents ?? 0
+          ))),
           processing_fee_amount_cents: processingFeeAmountCents,
           tip_amount_cents: tipAmountCents,
           pre_tip_amount_cents: preTipAmountCents,

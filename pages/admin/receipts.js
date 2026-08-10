@@ -165,6 +165,8 @@ const getReceiptBreakdown = (transaction, services) => {
         : 0;
 
   const discountAmountCents = Math.max(0, Number(transaction?.discount_amount_cents || 0));
+  const rewardPointsRedeemed = Math.max(0, Math.round(Number(transaction?.reward_points_redeemed || 0)));
+  const rewardDiscountAmountCents = Math.max(0, Number(transaction?.reward_discount_amount_cents || 0));
   const tipAmountCents = Math.max(0, Number(transaction?.tip_amount_cents || 0));
   const totalCents = Math.max(0, Number(transaction?.amount || 0));
   const preTipAmountFromApi = Number(transaction?.pre_tip_amount_cents);
@@ -202,6 +204,8 @@ const getReceiptBreakdown = (transaction, services) => {
     processingFeeCents,
     processingFeePercent,
     discountAmountCents,
+    rewardPointsRedeemed,
+    rewardDiscountAmountCents,
     tipAmountCents,
     tipPercent,
     preTipAmountCents,
@@ -402,6 +406,7 @@ export default function AdminReceiptsPage() {
             <div class="service">Services subtotal: ${formatCurrencyFromCents(breakdown.servicesSubtotalCents) || '$0.00'}</div>
             <div class="service">Processing fee${breakdown.processingFeePercent > 0 ? ` (${breakdown.processingFeePercent.toFixed(0)}%)` : ''}: ${formatCurrencyFromCents(breakdown.processingFeeCents) || '$0.00'}</div>
             <div class="service">Coupon${breakdown.couponLineLabel ? ` (${breakdown.couponLineLabel})` : ''}: -${formatCurrencyFromCents(breakdown.discountAmountCents) || '$0.00'}</div>
+            ${breakdown.rewardDiscountAmountCents > 0 ? `<div class="service">Rewards${breakdown.rewardPointsRedeemed > 0 ? ` (${breakdown.rewardPointsRedeemed} points)` : ''}: -${formatCurrencyFromCents(breakdown.rewardDiscountAmountCents) || '$0.00'}</div>` : ''}
             <div class="service">Tip${breakdown.tipPercent > 0 ? ` (${breakdown.tipPercent.toFixed(0)}%)` : ''}: ${formatCurrencyFromCents(breakdown.tipAmountCents) || '$0.00'}</div>
             <div class="service">Pre-tip total: ${formatCurrencyFromCents(breakdown.preTipAmountCents) || '$0.00'}</div>
           </div>
@@ -676,6 +681,13 @@ export default function AdminReceiptsPage() {
                         -{formatCurrencyFromCents(breakdown.discountAmountCents) || '$0.00'}
                       </p>
                     </div>
+
+                    {breakdown.rewardDiscountAmountCents > 0 && (
+                      <div className="mt-2 flex items-center justify-between text-purple-700">
+                        <p className="text-sm">Rewards{breakdown.rewardPointsRedeemed > 0 ? ` (${breakdown.rewardPointsRedeemed} points)` : ''}</p>
+                        <p className="text-sm font-medium">-{formatCurrencyFromCents(breakdown.rewardDiscountAmountCents) || '$0.00'}</p>
+                      </div>
+                    )}
 
                     <div className="mt-2 flex items-center justify-between text-amber-700">
                       <p className="text-sm">

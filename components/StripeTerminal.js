@@ -1295,17 +1295,28 @@ export default function StripeTerminal() {
                 {selectedCustomer.rewardsEnrolled ? (
                   <>
                     <div className="flex items-center justify-between"><span className="font-medium text-green-900">Lavender Rewards</span><strong className="text-green-900">{Number(selectedCustomer.pointsBalance || 0)} points</strong></div>
-                    {Number(selectedCustomer.pointsBalance || 0) >= 500 ? (
-                      <label className={`mt-3 flex items-center gap-2 rounded-lg border p-3 ${amountAfterDiscount >= 10 ? 'cursor-pointer border-green-400 bg-white' : 'border-stone-200 bg-stone-50 text-stone-500'}`}>
-                        <input type="checkbox" checked={redeemRewards} disabled={amountAfterDiscount < 10 || isLoading} onChange={(event) => setRedeemRewards(event.target.checked)} />
-                        <span><strong className="block">Redeem 500 points</strong><span className="text-xs">Apply $10.00 off this charge</span></span>
-                      </label>
-                    ) : <p className="mt-2 text-xs text-green-800">{500 - Number(selectedCustomer.pointsBalance || 0)} more points needed for a $10 reward.</p>}
+                    {Number(selectedCustomer.pointsBalance || 0) < 500 && <p className="mt-2 text-xs text-green-800">{500 - Number(selectedCustomer.pointsBalance || 0)} more points needed for a $10 reward.</p>}
                   </>
                 ) : <p className="text-xs text-green-800">This customer is not enrolled in rewards.</p>}
               </div>
             </div>
           )}
+
+          <div className="mt-3">
+            <label className="mb-2 block text-sm font-medium">Rewards</label>
+            {!selectedCustomer ? (
+              <p className="rounded-lg border border-stone-200 bg-stone-50 p-2 text-xs text-stone-600">Attach a customer above to view and redeem their reward points.</p>
+            ) : !selectedCustomer.rewardsEnrolled ? (
+              <p className="rounded-lg border border-stone-200 bg-stone-50 p-2 text-xs text-stone-600">This customer is not enrolled in Lavender Rewards.</p>
+            ) : Number(selectedCustomer.pointsBalance || 0) < 500 ? (
+              <p className="rounded-lg border border-stone-200 bg-stone-50 p-2 text-xs text-stone-600">{Number(selectedCustomer.pointsBalance || 0)} points available. Another {500 - Number(selectedCustomer.pointsBalance || 0)} points are needed for a $10 reward.</p>
+            ) : (
+              <label className={`flex items-center gap-3 rounded-lg border p-3 ${amountAfterDiscount >= 10 ? 'cursor-pointer border-purple-300 bg-purple-50' : 'border-stone-200 bg-stone-50 text-stone-500'}`}>
+                <input type="checkbox" checked={redeemRewards} disabled={amountAfterDiscount < 10 || isLoading || isCanceling} onChange={(event) => setRedeemRewards(event.target.checked)} />
+                <span className="text-sm"><strong className="block">Redeem 500 points for $10 off</strong><span className="text-xs">{amountAfterDiscount >= 10 ? `${Number(selectedCustomer.pointsBalance || 0)} points available` : 'The total after coupons must be at least $10.00'}</span></span>
+              </label>
+            )}
+          </div>
         </div>
       </div>
 

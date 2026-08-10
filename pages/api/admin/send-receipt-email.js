@@ -55,6 +55,7 @@ const buildReceiptEmailHtml = ({ transaction, services, breakdown }) => {
                       <tr><td style="padding:4px 0;color:#4b5563;">Services Subtotal</td><td style="padding:4px 0;text-align:right;">${escapeHtml(formatCurrencyFromCents(breakdown.servicesSubtotalCents))}</td></tr>
                       <tr><td style="padding:4px 0;color:#4b5563;">Processing Fee</td><td style="padding:4px 0;text-align:right;">${escapeHtml(formatCurrencyFromCents(breakdown.processingFeeCents))}</td></tr>
                       <tr><td style="padding:4px 0;color:#065f46;">Coupon${breakdown.couponLineLabel ? ` (${escapeHtml(breakdown.couponLineLabel)})` : ''}</td><td style="padding:4px 0;text-align:right;color:#065f46;">-${escapeHtml(formatCurrencyFromCents(breakdown.discountAmountCents))}</td></tr>
+                      ${Number(breakdown.rewardDiscountAmountCents || 0) > 0 ? `<tr><td style="padding:4px 0;color:#6b21a8;">Rewards${Number(breakdown.rewardPointsRedeemed || 0) > 0 ? ` (${escapeHtml(breakdown.rewardPointsRedeemed)} points)` : ''}</td><td style="padding:4px 0;text-align:right;color:#6b21a8;">-${escapeHtml(formatCurrencyFromCents(breakdown.rewardDiscountAmountCents))}</td></tr>` : ''}
                       <tr><td style="padding:4px 0;color:#92400e;">Tip</td><td style="padding:4px 0;text-align:right;color:#92400e;">${escapeHtml(formatCurrencyFromCents(breakdown.tipAmountCents))}</td></tr>
                       <tr><td style="padding:4px 0;color:#4b5563;">Pre-tip Total</td><td style="padding:4px 0;text-align:right;">${escapeHtml(formatCurrencyFromCents(breakdown.preTipAmountCents))}</td></tr>
                       <tr><td style="padding:10px 0 0;font-size:16px;font-weight:700;">Total Charged</td><td style="padding:10px 0 0;text-align:right;font-size:16px;font-weight:700;">${escapeHtml(formatCurrencyFromCents(breakdown.totalCents))}</td></tr>
@@ -114,6 +115,9 @@ export default async function handler(req, res) {
         'Sister Lavender Spa Receipt',
         `Transaction ID: ${transaction.id}`,
         `Date: ${transaction.date || ''}`,
+        ...(Number(breakdown.rewardDiscountAmountCents || 0) > 0
+          ? [`Rewards${Number(breakdown.rewardPointsRedeemed || 0) > 0 ? ` (${breakdown.rewardPointsRedeemed} points)` : ''}: -${formatCurrencyFromCents(breakdown.rewardDiscountAmountCents)}`]
+          : []),
         `Total Charged: ${formatCurrencyFromCents(breakdown.totalCents || 0)}`,
       ].join('\n'),
     });
