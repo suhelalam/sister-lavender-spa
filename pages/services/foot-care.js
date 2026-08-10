@@ -14,13 +14,16 @@ export default function FootCarePage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
-      <h1 className="text-3xl sm:text-4xl font-bold mb-6 text-purple-700">
-        Foot Care
+      <header className="mb-10 max-w-3xl">
+      <p className="eyebrow">Care from heel to toe</p>
+      <h1 className="mt-2 font-display text-4xl leading-tight text-[#423846] sm:text-5xl">
+        Pedicure & foot care
       </h1>
-      <p className="text-gray-600 mb-8">
+      <p className="mt-4 leading-7 text-stone-600">
         Pamper your feet with expert care—callus removal, exfoliation, 
         and deep hydration for comfort, softness, and refreshed soles.
       </p>
+      </header>
       
       {filtered.length === 0 ? (
         <p className="text-gray-600">No services found in this category.</p>

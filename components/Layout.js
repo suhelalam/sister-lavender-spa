@@ -2,9 +2,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { Menu, X, ShoppingCart, MapPin, Phone } from 'lucide-react';
+import { CalendarCheck, Heart, MapPin, Menu, MessageCircle, Phone, ShoppingCart, X } from 'lucide-react';
 import { useCart } from '../context/CartContext'; // adjust path if needed
 import { defaultBusinessHours } from '../lib/homeSettings';
+import ServiceCategoryNav from './ServiceCategoryNav';
 
 
 // Client-only cart button to prevent hydration mismatch on badge
@@ -54,11 +55,13 @@ export default function Layout({ children }) {
   const { items, totalItems, removeItem, clearCart } = useCart();
   const isCheckInKiosk =
     pathname === '/check-in' || pathname === '/CheckInPage' || pathname === '/terminal';
+  const showMobileActionBar = !pathname.startsWith('/admin') && pathname !== '/login';
+  const showServiceCategoryNav = pathname === '/services' || pathname.startsWith('/services/') || pathname === '/couples-services' || pathname === '/group-events';
 
   const navItems = [
     { label: 'Home', href: '/' },
     { label: 'Services & Pricing', href: '/services' },
-    { label: 'Couples', href: '/couples-services' },
+    { label: 'Side-by-Side', href: '/couples-services' },
     { label: 'Rewards', href: '/membership-rewards' },
     { label: 'Gift Cards', href: '/gift-card' },
     { label: 'Visit', href: '/location' },
@@ -172,11 +175,11 @@ export default function Layout({ children }) {
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
-      <div className="top-strip"><span>Open daily 9:30 AM–9:00 PM</span><a href="tel:+13129003131"><Phone size={13}/> (312) 900-3131</a><a href="https://maps.google.com/?q=2706+W+Chicago+Ave+Chicago+IL+60622"><MapPin size={13}/> West Town, Chicago</a></div>
+      <div className="top-strip"><span>Open daily 9:30 AM–9:00 PM</span><a href="tel:+13129003131"><Phone size={13}/> (312) 900-3131</a><a href="https://maps.google.com/?q=2706+W+Chicago+Ave+Chicago+IL+60622"><MapPin size={13}/> 2706 W Chicago Ave, Chicago, IL 60622</a></div>
       <header className="site-header px-4 md:px-8 py-3 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <Link href="/" className="brand-mark">
-            <span>Sister Lavender</span><small>SPA · CHICAGO</small>
+            <span>Sister Lavender Spa</span><small>CHICAGO</small>
           </Link>
 
           {/* Desktop Nav */}
@@ -254,6 +257,8 @@ export default function Layout({ children }) {
 
       </header>
 
+      {showServiceCategoryNav&&<ServiceCategoryNav/>}
+
       {cartOpen && (
         <div className="fixed inset-0 z-[80]" role="presentation">
           <button
@@ -314,15 +319,15 @@ export default function Layout({ children }) {
         </div>
       )}
 
-      <main id="main-content" tabIndex={-1} className="min-h-screen">
+      <main id="main-content" tabIndex={-1} className={`min-h-screen ${showMobileActionBar ? 'pb-20 md:pb-0' : ''}`}>
         {children}
       </main>
 
-      <footer className="site-footer px-6 py-12 text-sm">
+      <footer className={`site-footer px-6 py-12 text-sm ${showMobileActionBar ? 'pb-28 md:pb-12' : ''}`}>
         <div className="max-w-5xl mx-auto grid gap-8 md:grid-cols-3">
           <div>
             <h4 className="font-semibold text-lg mb-2">Contact</h4>
-            <p>2706 W Chicago Ave<br/>Chicago, IL 60622</p><p className="mt-2">selena@sisterlavenderspa.com<br/>(312) 900-3131</p>
+            <p>2706 W Chicago Ave, Chicago, IL 60622</p><p className="mt-2">selena@sisterlavenderspa.com<br/>(312) 900-3131</p>
           </div>
           <div>
             <h4 className="font-semibold text-lg mb-2">Business Hours</h4>
@@ -347,21 +352,17 @@ export default function Layout({ children }) {
               </a>
               <br />
             </p>
-            <p className="mt-2">2706 W Chicago Ave, Chicago, Ave, IL 60622</p>
+            <p className="mt-2">2706 W Chicago Ave, Chicago, IL 60622</p>
           </div>
         </div>
         <p className="text-center mt-8 text-xs">&copy; {new Date().getFullYear()} Sister Lavender Spa. All rights reserved.</p>
-        <p className="text-center mt-2 text-xs text-gray-500">
-          Built by{' '}
-          <a
-            href="mailto:leofran786@gmail.com"
-            className="text-purple-600 hover:underline"
-          >
-            Leo
-          </a>{' '}
-          – Need a website? Reach out.
-        </p>
       </footer>
+      {showMobileActionBar&&<nav className="fixed inset-x-0 bottom-0 z-[70] grid grid-cols-4 border-t border-[#d8cddd] bg-[#fbfaf7]/[0.98] pb-[max(.35rem,env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(52,40,57,0.13)] backdrop-blur-xl md:hidden" aria-label="Quick actions">
+        <Link href="/booking" className={`flex min-h-[64px] flex-col items-center justify-center gap-1 px-1 text-[10px] font-bold ${pathname==='/booking'?'text-[#4d3b55]':'text-stone-600'}`}><CalendarCheck size={20}/><span>Book Now</span></Link>
+        <Link href="/check-in" className="flex min-h-[64px] flex-col items-center justify-center gap-1 px-1 text-[10px] font-bold text-stone-600"><Heart size={20}/><span>Guest Check-in</span></Link>
+        <div className="flex min-h-[64px] flex-col items-center justify-center gap-1 px-1 text-[10px] font-bold text-stone-600"><span className="flex items-center gap-2"><a href="tel:+13129003131" aria-label="Call Sister Lavender Spa" className="rounded-full p-1"><Phone size={17}/></a><a href="sms:+13129003131" aria-label="Text Sister Lavender Spa" className="rounded-full p-1"><MessageCircle size={17}/></a></span><span>Call / Text</span></div>
+        <a href="https://maps.google.com/?q=2706+W+Chicago+Ave+Chicago+IL+60622" target="_blank" rel="noreferrer" className="flex min-h-[64px] flex-col items-center justify-center gap-1 px-1 text-[10px] font-bold text-stone-600"><MapPin size={20}/><span>Directions</span></a>
+      </nav>}
     </>
   );
 }

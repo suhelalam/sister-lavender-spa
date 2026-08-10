@@ -164,7 +164,7 @@ export default async function handler(req, res) {
   const email = customer?.emailAddress;
   const phone = customer?.phoneNumber;
 
-  if (!firstName || !lastName || !email || !phone || !startAt) {
+  if (!firstName || !lastName || !phone || !startAt) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -314,7 +314,7 @@ export default async function handler(req, res) {
 👤 CLIENT INFORMATION 👤
 ═══════════════════════════
 NAME: ${firstName} ${lastName}
-EMAIL: ${email}
+EMAIL: ${email || 'Not provided'}
 PHONE: ${phone} 📞📞📞
 
 ═══════════════════════════
@@ -409,7 +409,7 @@ ${note || 'None'}
 New booking request:
 ----------------------------
 Name: ${firstName} ${lastName}
-Email: ${email}
+Email: ${email || 'Not provided'}
 Phone: ${phone}
 Party Size: ${partySize || 1}
 Date & Time: ${appointmentDate}
@@ -420,18 +420,22 @@ Note: ${note || 'None'}
     `,
   };
 
-  async function upsertStripeCustomer() {
+  async function upsertStripeCustomer(existingCustomerId) {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
       apiVersion: '2024-06-20',
     });
 
-    const existing = await stripe.customers.list({ email, limit: 1 });
-    if (existing.data && existing.data.length > 0) {
-      return existing.data[0];
+    if (existingCustomerId) {
+      try { return await stripe.customers.retrieve(existingCustomerId); }
+      catch (error) { console.error('Could not reuse existing Stripe customer:', error); }
+    }
+    if (email) {
+      const existing = await stripe.customers.list({ email, limit: 1 });
+      if (existing.data && existing.data.length > 0) return existing.data[0];
     }
 
     return await stripe.customers.create({
-      email,
+      ...(email ? { email } : {}),
       name: `${firstName} ${lastName}`,
       phone,
       metadata: {
@@ -443,6 +447,29 @@ Note: ${note || 'None'}
         rewards_enrolled: rewardsOptIn ? 'true' : 'false',
       },
     });
+  }
+
+  async function sendSmsConfirmation(manageUrl) {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const from = process.env.TWILIO_PHONE_NUMBER;
+    if (!accountSid || !authToken || !from) return false;
+    const serviceSummary = normalizedServices.map((service) => service.serviceName).filter(Boolean).join(', ');
+    const message = `Sister Lavender Spa: Hi ${firstName}, your appointment is confirmed for ${appointmentDate}. Services: ${serviceSummary}.${manageUrl ? ` Manage: ${manageUrl}` : ' Call (312) 900-3131 for changes.'}`;
+    const payload = new URLSearchParams({ To: phone, From: from, Body: message });
+    const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: payload.toString(),
+    });
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(`Twilio confirmation failed (${response.status}): ${details.slice(0, 300)}`);
+    }
+    return true;
   }
 
   async function logBookingAnalytics() {
@@ -519,11 +546,16 @@ Note: ${note || 'None'}
       },
       rewardsEnrolled: Boolean(rewardsEnrolled),
       services: normalizedServices,
-      followUpEmail: {
+      followUpEmail: email ? {
         status: 'scheduled',
         sendAt: new Date(new Date(startAt).getTime() + (2 * 60 * 60 * 1000)).toISOString(), // 2 hours after appointment start time
         sentAt: null,
         error: null,
+      } : {
+        status: 'not-scheduled',
+        sendAt: null,
+        sentAt: null,
+        error: 'Customer did not provide an email address.',
       },
     });
 
@@ -572,22 +604,25 @@ Note: ${note || 'None'}
       console.warn('Admin Firestore not configured. Self-serve cancellation link disabled.');
     }
 
-    const confirmationMail = buildConfirmationMail({
-      email,
-      firstName,
-      appointmentDate,
-      formattedServicesHtml,
-      formattedServices,
-      partySize,
-      totalFormatted,
-      note,
-      cancelUrl,
-    });
-
     await transporter.sendMail(notificationMail);
-    await transporter.sendMail(confirmationMail);
+    let confirmationDelivery = 'none';
+    if (email) {
+      const confirmationMail = buildConfirmationMail({
+        email, firstName, appointmentDate, formattedServicesHtml, formattedServices,
+        partySize, totalFormatted, note, cancelUrl,
+      });
+      await transporter.sendMail(confirmationMail);
+      confirmationDelivery = 'email';
+    } else {
+      try {
+        if (await sendSmsConfirmation(cancelUrl)) confirmationDelivery = 'sms';
+      } catch (smsError) {
+        // The appointment already exists, so confirmation failure must not invite a duplicate retry.
+        console.error('SMS booking confirmation failed:', smsError);
+      }
+    }
 
-    const stripeCustomer = await upsertStripeCustomer();
+    const stripeCustomer = await upsertStripeCustomer(crmCustomer?.stripeCustomerId);
     if (crmCustomer?.id && stripeCustomer?.id) {
       await adminDb.collection('customers').doc(crmCustomer.id).set({
         stripeCustomerId: stripeCustomer.id,
@@ -603,7 +638,12 @@ Note: ${note || 'None'}
 
     return res.status(200).json({
       success: true,
-      message: 'Booking created in calendar and emails sent successfully',
+      message: confirmationDelivery === 'email'
+        ? 'Booking created and email confirmation sent successfully'
+        : confirmationDelivery === 'sms'
+          ? 'Booking created and text confirmation sent successfully'
+          : 'Booking created successfully',
+      confirmationDelivery,
       calendarEvent: {
         id: calendarEvent.id,
         link: calendarEvent.htmlLink,

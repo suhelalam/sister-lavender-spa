@@ -3,6 +3,7 @@ import Head from 'next/head';
 const SITE_NAME = 'Sister Lavender Spa';
 const DEFAULT_DESCRIPTION = 'Relax and rejuvenate at Sister Lavender Spa in Chicago with professional head spa treatments, therapeutic massages, and expert nail services.';
 const DEFAULT_ROBOTS = 'index,follow,max-image-preview:large';
+const DEFAULT_IMAGE = '/images/Firefly_Full-body spa ritual scene combining head and body massage. A tranquil environment wi 864039.jpg';
 
 function normalizeSiteUrl(url = '') {
   return String(url).trim().replace(/\/$/, '');
@@ -40,9 +41,8 @@ export default function SeoHead({
   const resolvedTitle = buildTitle(title);
   const resolvedDescription = description || DEFAULT_DESCRIPTION;
   const robotsValue = noIndex ? 'noindex,nofollow' : robots;
-  const imageUrl = image
-    ? (image.startsWith('http') ? image : `${siteUrl}${image.startsWith('/') ? image : `/${image}`}`)
-    : '';
+  const resolvedImage = image || DEFAULT_IMAGE;
+  const imageUrl = resolvedImage.startsWith('http') ? resolvedImage : (siteUrl ? `${siteUrl}${resolvedImage.startsWith('/') ? resolvedImage : `/${resolvedImage}`}` : resolvedImage);
 
   return (
     <Head>
@@ -51,15 +51,17 @@ export default function SeoHead({
       {keywords ? <meta key="keywords" name="keywords" content={keywords} /> : null}
       <meta key="robots" name="robots" content={robotsValue} />
       <meta key="og:type" property="og:type" content="website" />
+      <meta key="og:locale" property="og:locale" content="en_US" />
       <meta key="og:site_name" property="og:site_name" content={SITE_NAME} />
       <meta key="og:title" property="og:title" content={resolvedTitle} />
       <meta key="og:description" property="og:description" content={resolvedDescription} />
       {canonicalUrl ? <meta key="og:url" property="og:url" content={canonicalUrl} /> : null}
-      {imageUrl ? <meta key="og:image" property="og:image" content={imageUrl} /> : null}
-      <meta key="twitter:card" name="twitter:card" content={imageUrl ? 'summary_large_image' : 'summary'} />
+      <meta key="og:image" property="og:image" content={imageUrl} />
+      <meta key="og:image:alt" property="og:image:alt" content={`${resolvedTitle} at Sister Lavender Spa in Chicago`} />
+      <meta key="twitter:card" name="twitter:card" content="summary_large_image" />
       <meta key="twitter:title" name="twitter:title" content={resolvedTitle} />
       <meta key="twitter:description" name="twitter:description" content={resolvedDescription} />
-      {imageUrl ? <meta key="twitter:image" name="twitter:image" content={imageUrl} /> : null}
+      <meta key="twitter:image" name="twitter:image" content={imageUrl} />
       {canonicalUrl ? <link key="canonical" rel="canonical" href={canonicalUrl} /> : null}
       <link key="favicon" rel="icon" href="/favicon-96x96.png" />
       {structuredData ? (

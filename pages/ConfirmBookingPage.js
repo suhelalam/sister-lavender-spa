@@ -20,16 +20,17 @@ export default function ConfirmBookingPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [rewardsOptIn, setRewardsOptIn] = useState(false);
   const [rewardsLocked, setRewardsLocked] = useState(false);
   const [customerId, setCustomerId] = useState('');
+  const [profileLookup, setProfileLookup] = useState('');
   const [lookupState, setLookupState] = useState({ loading: false, message: '', type: '' });
   const [note, setNote] = useState('');
   const [partySize, setPartySize] = useState(1);
 
   const [loading, setLoading] = useState(false);
   const [booked, setBooked] = useState(false);
+  const [confirmationDelivery, setConfirmationDelivery] = useState('none');
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -102,9 +103,11 @@ export default function ConfirmBookingPage() {
   const lookupCustomer = async () => {
     setLookupState({ loading: true, message: '', type: '' });
     try {
+      const lookupValue = profileLookup.trim();
+      const lookupIsEmail = lookupValue.includes('@');
       const response = await fetch('/api/crm/booking-customer', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, email }),
+        body: JSON.stringify({ phone: lookupIsEmail ? '' : lookupValue, email: lookupIsEmail ? lookupValue : '' }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
@@ -186,7 +189,6 @@ export default function ConfirmBookingPage() {
             note,
             customerId,
             rewardsOptIn,
-            marketingOptIn,
           }),
         });
 
@@ -196,6 +198,7 @@ export default function ConfirmBookingPage() {
         throw new Error(bookingData.error || 'Failed to book appointment');
         }
 
+        setConfirmationDelivery(bookingData.confirmationDelivery || (email.trim() ? 'email' : 'none'));
         setBooked(true);
         clearCart();
         sessionStorage.removeItem('selectedSlot');
@@ -215,13 +218,23 @@ export default function ConfirmBookingPage() {
     <div className="max-w-3xl mx-auto p-6 space-y-8">
       <h1 className="text-2xl font-semibold text-purple-700">Confirm Your Booking</h1>
 
-      <div className="bg-yellow-50 p-4 rounded text-sm text-yellow-700 border border-yellow-200">
-        Appointment held for 10 minutes
-      </div>
-
       <form onSubmit={handleSubmit} className="space-y-6">
+        <section className="rounded-2xl border border-[#d8cddd] bg-gradient-to-br from-[#f5eff6] to-white p-5 shadow-sm sm:p-6" aria-labelledby="returning-guest-heading">
+          <p className="eyebrow">Save time</p>
+          <h2 id="returning-guest-heading" className="mt-2 font-display text-2xl text-[#423846]">Returning guest?</h2>
+          <p className="mt-2 text-sm leading-6 text-stone-600">Enter the full phone number or email connected to your profile. We’ll fill in your saved contact details and reconnect your rewards.</p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <input type="text" autoComplete="username" placeholder="Phone number or email" className="field min-w-0 flex-1" value={profileLookup} onChange={(event)=>{setProfileLookup(event.target.value);if(lookupState.message)setLookupState({loading:false,message:'',type:''})}}/>
+            <button type="button" onClick={lookupCustomer} disabled={lookupState.loading||!profileLookup.trim()} className="button-primary whitespace-nowrap sm:w-auto">
+              {lookupState.loading?'Finding profile…':'Find my profile'}
+            </button>
+          </div>
+          {lookupState.message&&<p className={`mt-3 rounded-lg p-3 text-sm ${lookupState.type==='success'?'bg-green-50 text-green-800':'bg-amber-50 text-amber-800'}`} role="status">{lookupState.message}</p>}
+          {!customerId&&<p className="mt-4 text-xs text-stone-500">New guest? Skip this step and complete your booking details below.</p>}
+        </section>
+
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-800">Contact Info</h2>
+          <div><p className="eyebrow">Your information</p><h2 className="mt-1 font-display text-2xl text-[#423846]">Booking details</h2>{customerId&&<p className="mt-2 text-sm font-semibold text-green-700">Your saved profile is connected.</p>}</div>
           <div className="flex gap-2 items-center">
             <span className="text-sm font-medium whitespace-nowrap rounded border border-gray-300 bg-gray-50 px-3 py-2">
               US +1
@@ -269,37 +282,16 @@ export default function ConfirmBookingPage() {
           />
           <input
             type="email"
-            placeholder="Email"
+            placeholder="Email (optional)"
             className="border rounded px-3 py-2 w-full"
             value={email}
             onChange={changeCustomerIdentity(setEmail)}
-            required
           />
-
-          <div className="rounded-xl border border-[#ded3e0] bg-[#f8f4f9] p-4">
-            <h3 className="font-semibold text-[#423846]">Returning guest?</h3>
-            <p className="mt-1 text-xs leading-5 text-stone-600">Use the phone number or email above to find your profile and keep your visits and rewards together.</p>
-            <button type="button" onClick={lookupCustomer} disabled={lookupState.loading || (!phone.trim() && !email.trim())} className="button-secondary mt-3">
-              {lookupState.loading ? 'Finding profile…' : 'Find my profile'}
-            </button>
-            {lookupState.message && <p className={`mt-3 text-sm ${lookupState.type === 'success' ? 'text-green-700' : 'text-amber-700'}`} role="status">{lookupState.message}</p>}
-          </div>
-
-          <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={marketingOptIn}
-              onChange={() => setMarketingOptIn(!marketingOptIn)}
-            />
-            <span>
-              Text me marketing and loyalty offers from Sister Lavender Spa. You consent to receive marketing texts, including Loyalty messages, coupons, and discounts, via the phone number you provided from this business. Text STOP to unsubscribe from texts from this business at any time, or HELP for more information. MSG and data rates may apply. Joining this program is not a condition of purchase. You certify that you are at least 18 years of age.
-            </span>
-          </label>
+          <p className="-mt-2 text-xs text-stone-500">Enter an email address if you would like to receive a booking confirmation and appointment details.</p>
 
           <label className="flex items-start gap-3 rounded-xl border border-[#d8dfd2] bg-[#f1f5ed] p-4 text-sm">
             <input type="checkbox" className="mt-1" checked={rewardsOptIn} disabled={rewardsLocked} onChange={(event) => setRewardsOptIn(event.target.checked)} />
-            <span><strong className="block text-[#46533f]">{rewardsLocked ? 'Lavender Rewards member' : 'Join Lavender Rewards'}</strong><span className="mt-1 block text-stone-600">{rewardsLocked ? 'Your membership is already active and will remain connected to this booking.' : 'Earn 1 point for every eligible service dollar paid. Joining is free, and your points stay connected to this phone number and email.'}</span></span>
+            <span><strong className="block text-[#46533f]">{rewardsLocked ? 'Lavender Rewards member' : 'Join Lavender Rewards'}</strong><span className="mt-1 block text-stone-600">{rewardsLocked ? 'Your membership is already active and will remain connected to this booking.' : 'Earn 1 point for every eligible service dollar paid. Joining is free, and your points stay connected to your guest profile.'}</span></span>
           </label>
 
           <div>
@@ -487,7 +479,7 @@ export default function ConfirmBookingPage() {
                   <Check size={58} strokeWidth={3} aria-hidden="true" />
                 </div>
                 <h2 id="booking-progress-title" className="mt-6 font-display text-4xl text-[#34442f]">Booked!</h2>
-                <p className="mt-3 leading-6 text-stone-600">Your appointment is confirmed. We sent the details to your email.</p>
+                <p className="mt-3 leading-6 text-stone-600">{confirmationDelivery==='email'?'Your appointment is confirmed. We sent the details to your email.':confirmationDelivery==='sms'?'Your appointment is confirmed. We sent the details by text message.':'Your appointment is confirmed. No digital confirmation was sent; please call or text us if you need the details.'}</p>
                 <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-green-700">Taking you home…</p>
               </>
             ) : (

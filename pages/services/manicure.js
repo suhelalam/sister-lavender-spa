@@ -14,13 +14,16 @@ export default function ManicurePage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
-      <h1 className="text-3xl sm:text-4xl font-bold mb-6 text-purple-700">
-        Manicure Services
+      <header className="mb-10 max-w-3xl">
+      <p className="eyebrow">Polished & precise</p>
+      <h1 className="mt-2 font-display text-4xl leading-tight text-[#423846] sm:text-5xl">
+        Manicure services
       </h1>
-      <p className="text-gray-600 mb-8">
+      <p className="mt-4 leading-7 text-stone-600">
         Achieve elegant, healthy hands with precision nail shaping, 
         cuticle care, and long-lasting polish in a relaxing, hygienic setting.
       </p>
+      </header>
       
       {filtered.length === 0 ? (
         <p className="text-gray-600">No services found in this category.</p>

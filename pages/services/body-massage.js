@@ -64,14 +64,17 @@ export default function BodyMassagePage() {
   );
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold mb-6 text-purple-700">
-        Body Massage Treatments
+    <main className="mx-auto max-w-6xl px-4 py-10 sm:py-14">
+      <header className="mb-10 max-w-3xl">
+      <p className="eyebrow">Rest & recovery</p>
+      <h1 className="mt-2 font-display text-4xl leading-tight text-[#423846] sm:text-5xl">
+        Body massage treatments
       </h1>
-      <p className="text-gray-600 mb-8">
+      <p className="mt-4 leading-7 text-stone-600">
         Release tension and restore vitality with personalized body massages 
         designed to relax muscles, improve circulation, and boost overall wellness.
       </p>
+      </header>
 
       {filtered.length === 0 ? (
         <p className="text-gray-600">No services found in this category.</p>
@@ -82,6 +85,6 @@ export default function BodyMassagePage() {
           ))}
         </div>
       )}
-    </div>
+    </main>
   );
 }
