@@ -1,6 +1,7 @@
 // components/StripeTerminal.js
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { CardElement, useElements, useStripe } from '@stripe/react-stripe-js';
 
 function ServicePickerButton({ item, selectedServices, onAdd, onQuantityChange, isAddOn = false }) {
   const variations = item.variations?.length ? item.variations : [item];
@@ -119,6 +120,9 @@ function ServicePickerButton({ item, selectedServices, onAdd, onQuantityChange, 
 }
 
 export default function StripeTerminal() {
+  const stripe = useStripe();
+  const elements = useElements();
+  const manualCardConfigured = Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
   const [amount, setAmount] = useState('');
   const [customAmount, setCustomAmount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -133,7 +137,9 @@ export default function StripeTerminal() {
   const [loadingStripeItems, setLoadingStripeItems] = useState(true);
   const [stripeItemsError, setStripeItemsError] = useState(null);
   const [cartPreviewShown, setCartPreviewShown] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('card'); // 'card' or 'cash'
+  const [paymentMethod, setPaymentMethod] = useState('card'); // 'card', 'manual_card', or 'cash'
+  const [manualCardComplete, setManualCardComplete] = useState(false);
+  const [manualCardError, setManualCardError] = useState('');
   const [receipt, setReceipt] = useState(null); // Store receipt data for display
   const [customerSearchQuery, setCustomerSearchQuery] = useState(''); // Email, phone, or name search
   const [selectedCustomer, setSelectedCustomer] = useState(null); // Selected customer object
@@ -331,7 +337,8 @@ export default function StripeTerminal() {
   const amountAfterRewards = Math.max(0, amountAfterDiscount - rewardDiscountAmount);
 
   const amountAfterDiscountCents = Math.max(0, Math.round(amountAfterRewards * 100));
-  const feeAmountCents = includeFee && paymentMethod === 'card' ? Math.max(0, Math.round(amountAfterDiscountCents * 0.03)) : 0;
+  const isCardPayment = paymentMethod === 'card' || paymentMethod === 'manual_card';
+  const feeAmountCents = includeFee && isCardPayment ? Math.max(0, Math.round(amountAfterDiscountCents * 0.03)) : 0;
   const finalChargeAmount = amountAfterDiscountCents + feeAmountCents;
   const feeAmount = feeAmountCents / 100;
   const displayAmount = finalChargeAmount / 100;
@@ -781,6 +788,122 @@ export default function StripeTerminal() {
   };
 
   // ----- Server-driven payment -----
+  const handleManualCardPayment = async () => {
+    setPaymentStatus(null);
+    setReceipt(null);
+    setManualCardError('');
+
+    const cardElement = elements?.getElement(CardElement);
+    if (!stripe || !elements || !cardElement) {
+      setManualCardError('Secure card entry is still loading. Please try again.');
+      return;
+    }
+    if (!manualCardComplete) {
+      setManualCardError('Please enter the complete card information.');
+      return;
+    }
+    if (baseAmount <= 0) {
+      setManualCardError('Please enter a valid amount.');
+      return;
+    }
+
+    const baseServiceLines = [
+      ...selectedServices.map((service) => ({
+        name: service.variation_name ? `${service.name} — ${service.variation_name}` : service.name,
+        amount: Math.max(0, Math.round(Number(service.amount || 0))),
+        quantity: Math.max(1, Math.round(Number(service.quantity || 1))),
+      })),
+      ...(manualAmount > 0
+        ? [{ name: 'Custom amount', amount: Math.max(0, Math.round(manualAmount * 100)), quantity: 1 }]
+        : []),
+    ];
+    const servicesForCharge = feeAmountCents > 0
+      ? [...baseServiceLines, { name: 'Processing fee (3%)', amount: feeAmountCents, quantity: 1 }]
+      : baseServiceLines;
+
+    setIsLoading(true);
+    try {
+      const piResp = await fetch('/api/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: finalChargeAmount,
+          currency: 'usd',
+          payment_method_type: 'card',
+          services: servicesForCharge,
+          stripe_customer_id: selectedCustomer?.id || '',
+          customer_name: selectedCustomer?.name || '',
+          customer_email: selectedCustomer?.email || '',
+          customer_phone: selectedCustomer?.phone || '',
+          customer_id: selectedCustomer?.crmCustomerId || '',
+          coupon_code: selectedCouponPayload?.code || '',
+          coupon_id: selectedCouponPayload?.coupon_id || '',
+          promotion_code_id: selectedCouponPayload?.promotion_code_id || '',
+          coupon_name: selectedCouponPayload?.name || '',
+          coupon_discount_type: selectedCouponPayload?.discount_type || '',
+          coupon_percent_off: selectedCouponPayload?.percent_off,
+          coupon_amount_off_cents: selectedCouponPayload?.amount_off,
+          coupon_currency: selectedCouponPayload?.currency || '',
+          coupon_discount_display: selectedCouponPayload?.discount_display || '',
+          discount_amount_cents: Math.max(0, Math.round(discountAmount * 100)),
+          reward_points_to_redeem: rewardPointsToRedeem,
+          reward_discount_amount_cents: Math.round(rewardDiscountAmount * 100),
+          processing_fee_amount_cents: Math.max(0, Math.round(feeAmountCents || 0)),
+        }),
+      });
+      const piData = await piResp.json();
+      if (!piResp.ok) throw new Error(piData.error || 'Could not start card payment.');
+
+      const confirmation = await stripe.confirmCardPayment(piData.client_secret, {
+        payment_method: { card: cardElement },
+      });
+      if (confirmation.error) throw new Error(confirmation.error.message);
+      if (confirmation.paymentIntent?.status !== 'succeeded') {
+        throw new Error('The card payment was not completed.');
+      }
+
+      const finalizeResponse = await fetch('/api/finalize-terminal-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_intent_id: piData.payment_intent_id }),
+      });
+      const finalizedPayment = await finalizeResponse.json();
+      if (!finalizeResponse.ok) {
+        throw new Error(finalizedPayment.error || 'Payment succeeded, but the receipt could not be finalized.');
+      }
+
+      setReceipt({
+        paymentMethod: 'card',
+        receiptNumber: piData.payment_intent_id,
+        timestamp: new Date().toLocaleString(),
+        amount: Number(finalizedPayment.total_amount_cents ?? finalChargeAmount) / 100,
+        services: baseServiceLines,
+        discountAmount,
+        rewardDiscountAmount,
+        rewardPointsRedeemed: rewardPointsToRedeem,
+        processingFeeAmount: feeAmountCents / 100,
+        processingFeePercent: amountAfterDiscountCents > 0 ? (feeAmountCents / amountAfterDiscountCents) * 100 : 0,
+        tipAmount: 0,
+        tipPercent: 0,
+        customerName: selectedCustomer?.name || null,
+        customerEmail: selectedCustomer?.email || null,
+      });
+      if (finalizedPayment.rewards && selectedCustomer) {
+        setSelectedCustomer((customer) => ({ ...customer, pointsBalance: finalizedPayment.rewards.pointsBalance }));
+      }
+      setPaymentStatus({ type: 'success', text: 'Manual card payment successful.' });
+      cardElement.clear();
+      setManualCardComplete(false);
+      resetForm();
+    } catch (error) {
+      console.error('Manual card payment failed:', error);
+      setManualCardError(error.message || 'Manual card payment failed. Please try again.');
+      setPaymentStatus({ type: 'error', text: 'Card payment was not completed.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handlePayment = async () => {
     setPaymentStatus(null);
     setReceipt(null);
@@ -1052,7 +1175,7 @@ export default function StripeTerminal() {
       {/* Payment Method Selection */}
       <div className="terminal-payment-method mb-3 rounded-lg border bg-gray-50 p-3">
         <h3 className="mb-2 text-sm font-semibold">Payment Method</h3>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4">
           <label className="flex items-center cursor-pointer">
             <input
               type="radio"
@@ -1063,7 +1186,19 @@ export default function StripeTerminal() {
               disabled={isLoading || isCanceling}
               className="mr-2"
             />
-            <span className="text-sm">Card Payment</span>
+            <span className="text-sm">Card Reader (tap/insert)</span>
+          </label>
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="radio"
+              name="paymentMethod"
+              value="manual_card"
+              checked={paymentMethod === 'manual_card'}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              disabled={isLoading || isCanceling}
+              className="mr-2"
+            />
+            <span className="text-sm">Enter Card Manually</span>
           </label>
           <label className="flex items-center cursor-pointer">
             <input
@@ -1544,6 +1679,39 @@ export default function StripeTerminal() {
         </div>
       )}
 
+      {paymentMethod === 'manual_card' && (
+        <div className="mb-3 rounded-lg border border-purple-200 bg-white p-3">
+          <label className="mb-2 block text-sm font-semibold text-stone-800">
+            Card information
+          </label>
+          {manualCardConfigured ? (
+            <div className="rounded-lg border border-stone-300 bg-white px-3 py-3 shadow-sm focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-100">
+              <CardElement
+                options={{
+                  hidePostalCode: false,
+                  style: {
+                    base: { fontSize: '16px', color: '#292524', '::placeholder': { color: '#a8a29e' } },
+                    invalid: { color: '#dc2626' },
+                  },
+                }}
+                onChange={(event) => {
+                  setManualCardComplete(event.complete);
+                  setManualCardError(event.error?.message || '');
+                }}
+              />
+            </div>
+          ) : (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              Manual card entry needs the Stripe publishable key configured for this site.
+            </div>
+          )}
+          <p className="mt-2 text-xs text-stone-500">
+            Card details are securely collected by Stripe and are not stored by this website.
+          </p>
+          {manualCardError && <p className="mt-2 text-sm text-red-600">{manualCardError}</p>}
+        </div>
+      )}
+
       {/* Payment Buttons */}
       <div className="terminal-actions space-y-2">
         {receipt && (
@@ -1591,7 +1759,7 @@ export default function StripeTerminal() {
                 <span>-$10.00</span>
               </div>
             )}
-            {includeFee && paymentMethod === 'card' && (
+            {includeFee && isCardPayment && (
               <div className="flex justify-between text-xs text-blue-900">
                 <span>Processing fee (3%)</span>
                 <span>+${feeAmount.toFixed(2)}</span>
@@ -1629,6 +1797,14 @@ export default function StripeTerminal() {
               </button>
             )}
           </>
+        ) : paymentMethod === 'manual_card' ? (
+          <button
+            onClick={handleManualCardPayment}
+            disabled={!manualCardConfigured || !stripe || !manualCardComplete || baseAmount <= 0 || isLoading}
+            className="w-full rounded-lg bg-green-600 p-3 text-base font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+          >
+            {isLoading ? 'Processing card...' : `Charge Card $${displayAmount.toFixed(2) || '0.00'}`}
+          </button>
         ) : (
           <button
             onClick={handleCashPayment}

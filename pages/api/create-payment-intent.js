@@ -35,7 +35,11 @@ export default async function handler(req, res) {
       visit_id = '',
       reward_points_to_redeem = 0,
       reward_discount_amount_cents = 0,
+      payment_method_type = 'card_present',
     } = req.body || {};
+
+    const safePaymentMethodType =
+      payment_method_type === 'card' ? 'card' : 'card_present';
 
     const safeServices = Array.isArray(services)
       ? services
@@ -126,7 +130,7 @@ export default async function handler(req, res) {
     const paymentIntentPayload = {
       amount,
       currency,
-      payment_method_types: ['card_present'],
+      payment_method_types: [safePaymentMethodType],
       capture_method: 'automatic',
       metadata,
     };
@@ -162,6 +166,7 @@ export default async function handler(req, res) {
         processingFeeAmountCents: safeProcessingFeeAmountCents,
         rewardPointsToRedeem: safeRewardPoints,
         rewardDiscountAmountCents: safeRewardDiscountCents,
+        paymentMethodType: safePaymentMethodType,
         createdAt: serverTimestamp(),
       });
     } catch (persistError) {
