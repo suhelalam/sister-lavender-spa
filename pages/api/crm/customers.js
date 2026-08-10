@@ -1,5 +1,10 @@
 import { adminDb, isAdminConfigured } from '../../../lib/firebaseAdmin';
 import { maskName, normalizePhone, upsertCustomer } from '../../../lib/crm';
+import { fromZonedTime } from 'date-fns-tz';
+import { google } from 'googleapis';
+
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'selena@sisterlavenderspa.com';
+const TIME_ZONE = 'America/Chicago';
 
 function bookingCustomer(doc) {
   const booking = doc.data();
@@ -56,6 +61,70 @@ async function findTodaysBookings(digits) {
     .sort((a, b) => String(a.appointmentAt || '').localeCompare(String(b.appointmentAt || '')));
 }
 
+function calendarEventCustomer(event) {
+  const description = String(event.description || '');
+  const field = (name) => description.match(new RegExp(`^${name}:\\s*(.+)$`, 'im'))?.[1]?.trim() || '';
+  const serviceBlock = description.match(/SERVICES BOOKED[^\n]*\n[^\n]*\n([\s\S]*?)(?:\n[^\n]*NOTES|$)/i)?.[1]
+    || description.match(/Services:\s*\n([\s\S]*?)(?:\n\s*(?:Phone|Email|Notes):|$)/i)?.[1]
+    || '';
+  const services = serviceBlock.split('\n').map((line) => {
+    const clean = line.replace(/^\s*(?:[•+-]|-\s*)+\s*/, '').trim();
+    if (!clean || !/[a-z0-9\u3400-\u9fff]/i.test(clean) || /^none$/i.test(clean)) return null;
+    const quantity = Number(clean.match(/\bx\s*(\d+)\s*$/i)?.[1] || 1);
+    const durationMinutes = Number(clean.match(/\((\d{1,3})\s*min(?:ute)?s?\)/i)?.[1] || 0);
+    const serviceName = clean
+      .replace(/\s*\(\d{1,3}\s*min(?:ute)?s?\)/i, '')
+      .replace(/\s+x\s*\d+\s*$/i, '')
+      .trim();
+    return serviceName ? { serviceName, durationMinutes, quantity } : null;
+  }).filter(Boolean);
+  const name = field('NAME') || String(event.summary || '').replace(/^checked-in\s*[-:–—]?\s*/i, '').trim();
+  const phone = field('PHONE').replace(/[^\d+(). -].*$/, '').trim();
+  return {
+    id: null,
+    bookingId: event.id,
+    maskedName: maskName(name),
+    name,
+    phone,
+    email: field('EMAIL').toLowerCase(),
+    appointmentAt: event.start?.dateTime || event.start?.date || null,
+    services,
+    pointsBalance: 0,
+    source: 'calendar',
+  };
+}
+
+async function findTodaysCalendarBookings(digits) {
+  if (digits.length < 4 || !process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) return [];
+  const today = dateKeyInTimeZone(new Date());
+  const tomorrow = new Date(`${today}T12:00:00Z`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const tomorrowKey = tomorrow.toISOString().slice(0, 10);
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    },
+    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+  });
+  const calendar = google.calendar({ version: 'v3', auth: await auth.getClient() });
+  const response = await calendar.events.list({
+    calendarId: CALENDAR_ID,
+    timeMin: fromZonedTime(`${today}T00:00:00`, TIME_ZONE).toISOString(),
+    timeMax: fromZonedTime(`${tomorrowKey}T00:00:00`, TIME_ZONE).toISOString(),
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 250,
+  });
+  return (response.data.items || [])
+    .filter((event) => event.status !== 'cancelled')
+    .map(calendarEventCustomer)
+    .filter((booking) => {
+      const phone = normalizePhone(booking.phone);
+      return digits.length === 4 ? phone.endsWith(digits) : phone === digits;
+    });
+}
+
 export default async function handler(req, res) {
   if (!isAdminConfigured || !adminDb) return res.status(503).json({ error: 'Customer database is not configured.' });
   if (req.method === 'POST') {
@@ -79,7 +148,18 @@ export default async function handler(req, res) {
 
     // A kiosk lookup is visit-first: today's appointment carries the booking ID
     // and booked services that must be checked in, even when a CRM profile exists.
-    const todaysBookings = profilesOnly ? [] : await findTodaysBookings(digits);
+    let todaysBookings = profilesOnly ? [] : await findTodaysBookings(digits);
+    if (!profilesOnly) {
+      try {
+        const calendarBookings = await findTodaysCalendarBookings(digits);
+        const storedBookingIds = new Set(todaysBookings.map((booking) => booking.bookingId));
+        todaysBookings = [...todaysBookings, ...calendarBookings.filter((booking) => !storedBookingIds.has(booking.bookingId))]
+          .sort((a, b) => String(a.appointmentAt || '').localeCompare(String(b.appointmentAt || '')));
+      } catch (error) {
+        // A temporary Calendar outage should not hide appointments already stored in Firestore.
+        console.error('Calendar appointment lookup failed:', error);
+      }
+    }
     if (todaysBookings.length) {
       const customersByPhone = new Map(customers.map((customer) => [normalizePhone(customer.phone), customer]));
       customers = todaysBookings.map((booking) => {
