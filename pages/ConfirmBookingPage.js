@@ -282,10 +282,11 @@ export default function ConfirmBookingPage() {
           />
           <input
             type="email"
-            placeholder="Email (optional)"
+            placeholder="Email"
             className="border rounded px-3 py-2 w-full"
             value={email}
             onChange={changeCustomerIdentity(setEmail)}
+            required
           />
           <p className="-mt-2 text-xs text-stone-500">Enter an email address if you would like to receive a booking confirmation and appointment details.</p>
 
