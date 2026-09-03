@@ -34,10 +34,17 @@ function ClientOnlyCheckoutButton({ items, onClick }) {
   useEffect(() => setHasMounted(true), []);
   if (!hasMounted) return null;
 
+  const handleContinue = () => {
+    // The select-time page uses this booking snapshot to request availability.
+    // Keep the cart drawer path in sync with AppointmentSummary's Next button.
+    sessionStorage.setItem('services', JSON.stringify(items));
+    onClick?.();
+  };
+
   return (
     <Link
       href="/select-time"
-      onClick={onClick}
+      onClick={handleContinue}
       className={`bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 ${
         items.length === 0 ? 'opacity-50 pointer-events-none' : ''
       }`}

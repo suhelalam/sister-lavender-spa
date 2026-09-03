@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import AppointmentSummary from '../components/AppointmentSummary';
+import { useCart } from '../context/CartContext';
 
 const BUSINESS_TIME_ZONE = 'America/Chicago';
 
@@ -31,6 +32,7 @@ function localDateFromKey(dateKey) {
 }
 
 export default function SelectTimePage() {
+  const { items: cartItems, isClient } = useCart();
   const [services, setServices] = useState([]);
   const [availability, setAvailability] = useState([]);
   const [selectedDate, setSelectedDate] = useState(() => localDateFromKey(getBusinessDateKey()));
@@ -76,13 +78,32 @@ export default function SelectTimePage() {
   const weekDates = getWeekDates(weekOffset);
 
   useEffect(() => {
+    if (!isClient) return;
+
     const stored = sessionStorage.getItem('services');
-    if (!stored) {
-      setError('No services selected.');
-      return;
+    if (stored) {
+      try {
+        const storedServices = JSON.parse(stored);
+        if (Array.isArray(storedServices) && storedServices.length > 0) {
+          setError(null);
+          setServices(storedServices);
+          return;
+        }
+      } catch (parseError) {
+        console.error('Failed to read selected services:', parseError);
+      }
     }
-    setServices(JSON.parse(stored));
-  }, []);
+
+    // Recover when arriving from an older cart flow that did not create the
+    // session snapshot, while still waiting for localStorage cart hydration.
+    if (cartItems.length > 0) {
+      sessionStorage.setItem('services', JSON.stringify(cartItems));
+      setError(null);
+      setServices(cartItems);
+    } else {
+      setError('No services selected.');
+    }
+  }, [cartItems, isClient]);
 
   useEffect(() => {
     if (!services.length) return;
