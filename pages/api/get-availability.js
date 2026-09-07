@@ -133,10 +133,14 @@ function getBusinessTodayDateString() {
 
 export default async function handler(req, res) {
   const { startDate } = req.body;
+  const requestedDurationMinutes = Number(req.body?.durationMinutes);
+  const appointmentDurationMinutes =
+    Number.isFinite(requestedDurationMinutes) && requestedDurationMinutes > 0
+      ? Math.ceil(requestedDurationMinutes)
+      : 30;
 
   const generateTimeSlots = (dateString, businessHours) => {
     const slots = [];
-    const durationMinutes = 30;
 
     const [yearRaw, monthRaw, dayRaw] = dateString.split("-");
     const year = Number(yearRaw);
@@ -156,7 +160,7 @@ export default async function handler(req, res) {
     let currentHour = startHour;
     let currentMinute = startMinute;
 
-    while ((currentHour * 60 + currentMinute + durationMinutes) <= closeTotalMinutes) {
+    while ((currentHour * 60 + currentMinute + appointmentDurationMinutes) <= closeTotalMinutes) {
       const utcDate = toUtcDateFromBusinessLocal(
         year,
         month,
@@ -169,11 +173,11 @@ export default async function handler(req, res) {
       if (utcDate > now) {
         slots.push({
           startAt: utcDate.toISOString(),
-          endAt: new Date(utcDate.getTime() + durationMinutes * 60000).toISOString()
+          endAt: new Date(utcDate.getTime() + appointmentDurationMinutes * 60000).toISOString()
         });
       }
 
-      currentMinute += durationMinutes;
+      currentMinute += 30;
       if (currentMinute >= 60) {
         currentHour += Math.floor(currentMinute / 60);
         currentMinute = currentMinute % 60;

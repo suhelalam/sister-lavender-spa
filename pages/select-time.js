@@ -31,6 +31,16 @@ function localDateFromKey(dateKey) {
   return new Date(year, month - 1, day, 0, 0, 0, 0);
 }
 
+function getTotalDurationMinutes(items) {
+  const totalDurationMs = items.reduce((total, item) => {
+    const duration = Number(item?.duration) || 0;
+    const quantity = Math.max(1, Number.parseInt(item?.quantity, 10) || 1);
+    return total + duration * quantity;
+  }, 0);
+
+  return Math.ceil(totalDurationMs / 60000);
+}
+
 export default function SelectTimePage() {
   const { items: cartItems, isClient } = useCart();
   const [services, setServices] = useState([]);
@@ -108,6 +118,10 @@ export default function SelectTimePage() {
   useEffect(() => {
     if (!services.length) return;
 
+    const selectedServices = isClient && cartItems.length > 0 ? cartItems : services;
+    const durationMinutes = getTotalDurationMinutes(selectedServices);
+    if (durationMinutes <= 0) return;
+
     const fetchAvailability = async () => {
       setLoading(true);
       setError(null);
@@ -118,12 +132,21 @@ export default function SelectTimePage() {
           body: JSON.stringify({
             serviceVariationId: services[0].id,
             startDate: formatDate(selectedDate),
+            durationMinutes,
           }),
         });
 
         const data = await res.json();
         if (data.success) {
-          setAvailability(Array.isArray(data.availabilities) ? data.availabilities : []);
+          const nextAvailability = Array.isArray(data.availabilities) ? data.availabilities : [];
+          setAvailability(nextAvailability);
+          setSelectedSlot((currentSlot) => {
+            if (!currentSlot || nextAvailability.some((slot) => slot.startAt === currentSlot.startAt)) {
+              return currentSlot;
+            }
+            sessionStorage.removeItem('selectedSlot');
+            return null;
+          });
         }
 
       } catch (err) {
@@ -134,7 +157,7 @@ export default function SelectTimePage() {
     };
 
     fetchAvailability();
-  }, [selectedDate, services]);
+  }, [cartItems, isClient, selectedDate, services]);
 
   const handleSlotSelect = (slot) => {
     setSelectedSlot(slot);
