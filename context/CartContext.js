@@ -1,6 +1,24 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 
 const CartContext = createContext();
+const MAX_SERVICE_COUNT = 10;
+
+function getItemQuantity(item) {
+  return Math.max(1, Number.parseInt(item?.quantity, 10) || 1);
+}
+
+function limitCartItems(items) {
+  if (!Array.isArray(items)) return [];
+
+  let remaining = MAX_SERVICE_COUNT;
+  return items.reduce((limitedItems, item) => {
+    if (remaining <= 0) return limitedItems;
+    const quantity = Math.min(getItemQuantity(item), remaining);
+    remaining -= quantity;
+    limitedItems.push({ ...item, quantity });
+    return limitedItems;
+  }, []);
+}
 
 export function CartProvider({ children }) {
   const [items, setItems] = useState([]);
@@ -9,7 +27,11 @@ export function CartProvider({ children }) {
   useEffect(() => {
     const stored = localStorage.getItem('cart');
     if (stored) {
-      setItems(JSON.parse(stored));
+      try {
+        setItems(limitCartItems(JSON.parse(stored)));
+      } catch {
+        setItems([]);
+      }
     }
     setIsClient(true);
   }, []);
@@ -22,6 +44,9 @@ export function CartProvider({ children }) {
 
   const addItem = (item) => {
     setItems((prev) => {
+      const currentCount = prev.reduce((sum, currentItem) => sum + getItemQuantity(currentItem), 0);
+      if (currentCount >= MAX_SERVICE_COUNT) return prev;
+
       const exists = prev.find((i) => i.id === item.id);
       if (exists) {
         return prev.map((i) =>
@@ -44,10 +69,10 @@ export function CartProvider({ children }) {
 
   const clearCart = () => setItems([]);
 
-  const totalItems = items.reduce((sum, i) => sum + (i.quantity || 1), 0);
+  const totalItems = items.reduce((sum, item) => sum + getItemQuantity(item), 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, clearCart, totalItems, isClient }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, clearCart, totalItems, isClient, maxServiceCount: MAX_SERVICE_COUNT }}>
       {children}
     </CartContext.Provider>
   );

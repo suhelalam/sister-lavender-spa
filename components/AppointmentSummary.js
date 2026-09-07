@@ -8,7 +8,7 @@ import { ChevronDown, ChevronUp, Plus, Minus } from 'lucide-react';
 const BUSINESS_TIME_ZONE = 'America/Chicago';
 
 export default function AppointmentSummary({ selectedSlot }) {
-  const { items, addItem, removeItem, isClient } = useCart();
+  const { items, addItem, removeItem, isClient, totalItems, maxServiceCount } = useCart();
   const [isOpen, setIsOpen] = useState(true);
 
   useEffect(() => {
@@ -59,14 +59,6 @@ export default function AppointmentSummary({ selectedSlot }) {
 
   const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const totalFormatted = `$${(total / 100).toFixed(2)}`;
-  const totalDurationMs = items.reduce(
-    (sum, item) => sum + ((item.duration || 0) * item.quantity),
-    0
-  );
-
-  const totalDurationMin = Math.floor(totalDurationMs / 60000);
-  // console.log('Total duration (min):', totalDurationMin);
-
   function formatDuration(minutes) {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
@@ -115,6 +107,11 @@ export default function AppointmentSummary({ selectedSlot }) {
                         {item.variationName && (
                           <div className="text-sm text-gray-600">{item.variationName}</div>
                         )}
+                        {Number(item.duration) > 0 && (
+                          <div className="text-sm text-gray-600">
+                            Duration: {formatDuration(Math.ceil(Number(item.duration) / 60000))}
+                          </div>
+                        )}
                         <div className="text-sm text-purple-700 font-semibold">
                           ${(item.price / 100).toFixed(2)} x {item.quantity}
                         </div>
@@ -131,7 +128,8 @@ export default function AppointmentSummary({ selectedSlot }) {
                         <span className="text-sm">{item.quantity}</span>
                         <button
                           onClick={() => addItem(item)}
-                          className="p-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                          disabled={totalItems >= maxServiceCount}
+                          className="p-1 bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:cursor-not-allowed disabled:opacity-40"
                           aria-label="Increase"
                         >
                           <Plus size={16} />
@@ -161,9 +159,11 @@ export default function AppointmentSummary({ selectedSlot }) {
               <div className="mt-4 pt-2 border-t text-right font-semibold text-purple-800 text-lg">
                 Total: {totalFormatted}
               </div>
-              <div className="mt-2 text-sm text-gray-700">
-                Total Duration: {formatDuration(totalDurationMin)}
-              </div>
+              {totalItems >= maxServiceCount && (
+                <div className="mt-2 text-sm text-gray-600">
+                  Maximum of {maxServiceCount} services per booking.
+                </div>
+              )}
 
               {/* NEXT BUTTON */}
               <button

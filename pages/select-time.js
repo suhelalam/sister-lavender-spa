@@ -31,14 +31,13 @@ function localDateFromKey(dateKey) {
   return new Date(year, month - 1, day, 0, 0, 0, 0);
 }
 
-function getTotalDurationMinutes(items) {
-  const totalDurationMs = items.reduce((total, item) => {
-    const duration = Number(item?.duration) || 0;
-    const quantity = Math.max(1, Number.parseInt(item?.quantity, 10) || 1);
-    return total + duration * quantity;
-  }, 0);
+function getAppointmentDurationMinutes(items) {
+  const longestServiceDurationMs = items.reduce(
+    (longest, item) => Math.max(longest, Number(item?.duration) || 0),
+    0
+  );
 
-  return Math.ceil(totalDurationMs / 60000);
+  return Math.ceil(longestServiceDurationMs / 60000);
 }
 
 export default function SelectTimePage() {
@@ -119,7 +118,7 @@ export default function SelectTimePage() {
     if (!services.length) return;
 
     const selectedServices = isClient && cartItems.length > 0 ? cartItems : services;
-    const durationMinutes = getTotalDurationMinutes(selectedServices);
+    const durationMinutes = getAppointmentDurationMinutes(selectedServices);
     if (durationMinutes <= 0) return;
 
     const fetchAvailability = async () => {
