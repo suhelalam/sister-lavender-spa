@@ -121,6 +121,13 @@ export default function SelectTimePage() {
     const durationMinutes = getAppointmentDurationMinutes(selectedServices);
     if (durationMinutes <= 0) return;
 
+    const controller = new AbortController();
+
+    // Never leave another day's slots visible while this request is pending.
+    setAvailability([]);
+    setSelectedSlot(null);
+    sessionStorage.removeItem('selectedSlot');
+
     const fetchAvailability = async () => {
       setLoading(true);
       setError(null);
@@ -128,6 +135,7 @@ export default function SelectTimePage() {
         const res = await fetch('/api/get-availability', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             serviceVariationId: services[0].id,
             startDate: formatDate(selectedDate),
@@ -136,26 +144,25 @@ export default function SelectTimePage() {
         });
 
         const data = await res.json();
-        if (data.success) {
-          const nextAvailability = Array.isArray(data.availabilities) ? data.availabilities : [];
-          setAvailability(nextAvailability);
-          setSelectedSlot((currentSlot) => {
-            if (!currentSlot || nextAvailability.some((slot) => slot.startAt === currentSlot.startAt)) {
-              return currentSlot;
-            }
-            sessionStorage.removeItem('selectedSlot');
-            return null;
-          });
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to fetch availability.');
         }
 
+        if (!controller.signal.aborted) {
+          const nextAvailability = Array.isArray(data.availabilities) ? data.availabilities : [];
+          setAvailability(nextAvailability);
+        }
       } catch (err) {
-        setError('Failed to fetch availability.');
+        if (err.name !== 'AbortError') {
+          setError('Failed to fetch availability.');
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
     fetchAvailability();
+    return () => controller.abort();
   }, [cartItems, isClient, selectedDate, services]);
 
   const handleSlotSelect = (slot) => {
@@ -168,11 +175,17 @@ export default function SelectTimePage() {
   };
 
   const goToPreviousWeek = () => {
-    if (weekOffset > 0) setWeekOffset(weekOffset - 1);
+    if (weekOffset > 0) {
+      const nextOffset = weekOffset - 1;
+      setWeekOffset(nextOffset);
+      setSelectedDate(nextOffset === 0 ? today : getWeekDates(nextOffset)[0]);
+    }
   };
 
   const goToNextWeek = () => {
-    setWeekOffset(weekOffset + 1);
+    const nextOffset = weekOffset + 1;
+    setWeekOffset(nextOffset);
+    setSelectedDate(getWeekDates(nextOffset)[0]);
   };
 
   return (
@@ -211,14 +224,14 @@ export default function SelectTimePage() {
 
           {/* Weekdays */}
           <div className="grid grid-cols-7 text-center mb-2 gap-1 text-sm font-medium text-gray-600">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-              <div key={i}>{d}</div>
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+              <div key={index}>{day}</div>
             ))}
           </div>
 
           {/* Day Buttons */}
           <div className="grid grid-cols-7 gap-1 mb-4">
-            {weekDates.map((date, i) => {
+            {weekDates.map((date) => {
               const dateKey = formatDate(date);
               const isPast = dateKey < todayKey;
               const isSelected = dateKey === formatDate(selectedDate);
@@ -226,7 +239,7 @@ export default function SelectTimePage() {
               return (
                 <button
                   type="button"
-                  key={i}
+                  key={dateKey}
                   disabled={isPast}
                   onClick={() => setSelectedDate(date)}
                   aria-pressed={isSelected}
