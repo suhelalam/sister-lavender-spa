@@ -86,6 +86,16 @@ export default function SelectTimePage() {
 
   const weekDates = getWeekDates(weekOffset);
 
+  // This page is statically generated, so its initial state can contain the
+  // date from build time. Re-read the Chicago date after hydration before the
+  // services effect can trigger the first availability request.
+  useEffect(() => {
+    if (!isClient) return;
+
+    setSelectedDate(localDateFromKey(getBusinessDateKey()));
+    setWeekOffset(0);
+  }, [isClient]);
+
   useEffect(() => {
     if (!isClient) return;
 
@@ -115,7 +125,7 @@ export default function SelectTimePage() {
   }, [cartItems, isClient]);
 
   useEffect(() => {
-    if (!services.length) return;
+    if (!isClient || !services.length) return;
 
     const selectedServices = isClient && cartItems.length > 0 ? cartItems : services;
     const durationMinutes = getAppointmentDurationMinutes(selectedServices);
