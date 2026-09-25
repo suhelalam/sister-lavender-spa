@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import OurPolicy from './our-policy';
 import ServiceAgreement from './service-agreement';
 import { Check, LoaderCircle } from 'lucide-react';
+import Link from 'next/link';
 
 const BUSINESS_TIME_ZONE = 'America/Chicago';
 
@@ -216,6 +217,9 @@ export default function ConfirmBookingPage() {
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-8">
+      <Link href="/select-time" className="inline-flex text-sm font-semibold text-purple-700 hover:underline">
+        &larr; Back to time selection
+      </Link>
       <h1 className="text-2xl font-semibold text-purple-700">Confirm Your Booking</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">

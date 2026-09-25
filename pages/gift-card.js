@@ -90,7 +90,21 @@ export default function GiftCard() {
 
     document.head.appendChild(script);
 
+    const improveGiftCardAltText = () => {
+      document.querySelectorAll('.gift-up-target img').forEach((image, index) => {
+        if (!image.alt || /^\d+$/.test(image.alt.trim())) {
+          const nearbyText = image.closest('article, li, div')?.textContent || '';
+          const amount = nearbyText.match(/\$\s?\d+(?:\.\d{2})?/)?.[0];
+          image.alt = amount ? `${amount.replace(/\s/g, '')} Sister Lavender Spa gift card` : `Sister Lavender Spa gift card option ${index + 1}`;
+        }
+      });
+    };
+    const giftCardObserver = new MutationObserver(improveGiftCardAltText);
+    const giftCardTarget = document.querySelector('.gift-up-target');
+    if (giftCardTarget) giftCardObserver.observe(giftCardTarget, { childList: true, subtree: true });
+
     return () => {
+      giftCardObserver.disconnect();
       const existingScript = document.querySelector('script[src="https://cdn.giftup.app/dist/gift-up.js"]');
       if (existingScript) {
         existingScript.remove();

@@ -46,6 +46,7 @@ export default function ServiceCard({ service, image = '', variant = 'default' }
 
   const [selectedVariation, setSelectedVariation] = useState(defaultVariation);
   const [showDetails, setShowDetails] = useState(false);
+  const [added, setAdded] = useState(false);
   const categoryImage = {
     'Head Spa Treatments': '/images/head.jpg',
     'Body Massage Treatments': '/images/bodyMassage.jpg',
@@ -71,7 +72,8 @@ export default function ServiceCard({ service, image = '', variant = 'default' }
       category: service.category || '',
       isAddOn: false,
     });
-
+    setAdded(true);
+    window.setTimeout(() => setAdded(false), 2200);
   };
 
   if (variant === 'slim') {
@@ -132,7 +134,7 @@ export default function ServiceCard({ service, image = '', variant = 'default' }
           onClick={handleAddToCart}
           className="mt-4 flex min-h-[42px] w-full items-center justify-center gap-2 rounded-full bg-[#66516f] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#4d3b55]"
         >
-          <Plus size={15}/> Add to appointment
+          {added ? <Check size={15}/> : <Plus size={15}/>} {added ? 'Added' : 'Add to appointment'}
         </button>
       </article>
     );
@@ -204,8 +206,9 @@ export default function ServiceCard({ service, image = '', variant = 'default' }
           onClick={handleAddToCart}
           className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-[#66516f] px-5 font-bold text-white shadow-[0_8px_20px_rgba(77,59,85,0.2)] transition hover:bg-[#4d3b55]"
         >
-          <Check size={17}/> Add to appointment
+          {added ? <Check size={17}/> : <Plus size={17}/>} {added ? 'Added' : 'Add to appointment'}
         </button>
+        {added && <p className="mt-2 text-center text-sm font-semibold text-green-700" role="status">Added to your appointment.</p>}
       </div>
       </div>
     </article>

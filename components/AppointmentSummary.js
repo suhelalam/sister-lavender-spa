@@ -10,6 +10,7 @@ const BUSINESS_TIME_ZONE = 'America/Chicago';
 export default function AppointmentSummary({ selectedSlot }) {
   const { items, addItem, removeItem, isClient, totalItems, maxServiceCount } = useCart();
   const [isOpen, setIsOpen] = useState(true);
+  const [slotError, setSlotError] = useState('');
 
   useEffect(() => {
     // Wait for the persisted cart to hydrate. Otherwise the initial empty
@@ -72,10 +73,15 @@ export default function AppointmentSummary({ selectedSlot }) {
   const handleNext = () => {
   sessionStorage.setItem('services', JSON.stringify(items));
   if (selectedSlot) {
+    setSlotError('');
     sessionStorage.setItem('selectedSlot', JSON.stringify(selectedSlot));
     window.location.href = '/ConfirmBookingPage';
   } else {
-    window.location.href = '/select-time';
+    if (window.location.pathname === '/select-time') {
+      setSlotError('Please select a time slot.');
+    } else {
+      window.location.href = '/select-time';
+    }
   }
 };
 
@@ -172,6 +178,11 @@ export default function AppointmentSummary({ selectedSlot }) {
               >
                 Next
               </button>
+              {slotError && (
+                <p className="mt-3 text-sm font-semibold text-red-600" role="alert">
+                  {slotError}
+                </p>
+              )}
             </>
           )}
         </div>

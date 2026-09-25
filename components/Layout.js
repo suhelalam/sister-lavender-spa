@@ -359,11 +359,11 @@ export default function Layout({ children }) {
               </a>
               <br />
             </p>
-            <p className="mt-2">2706 W Chicago Ave, Chicago, IL 60622</p>
           </div>
         </div>
         <p className="text-center mt-8 text-xs">&copy; {new Date().getFullYear()} Sister Lavender Spa. All rights reserved.</p>
       </footer>
+      {showMobileActionBar&&<Link href="/booking" className="fixed bottom-6 right-6 z-[65] hidden rounded-full bg-[#66516f] px-6 py-3 font-bold text-white shadow-[0_10px_30px_rgba(54,39,59,.3)] transition hover:-translate-y-0.5 hover:bg-[#4d3b55] md:inline-flex">Book Now</Link>}
       {showMobileActionBar&&<nav className="fixed inset-x-0 bottom-0 z-[70] grid grid-cols-4 border-t border-[#d8cddd] bg-[#fbfaf7]/[0.98] pb-[max(.35rem,env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(52,40,57,0.13)] backdrop-blur-xl md:hidden" aria-label="Quick actions">
         <Link href="/booking" className={`flex min-h-[64px] flex-col items-center justify-center gap-1 px-1 text-[10px] font-bold ${pathname==='/booking'?'text-[#4d3b55]':'text-stone-600'}`}><CalendarCheck size={20}/><span>Book Now</span></Link>
         <Link href="/check-in" className="flex min-h-[64px] flex-col items-center justify-center gap-1 px-1 text-[10px] font-bold text-stone-600"><Heart size={20}/><span>Guest Check-in</span></Link>

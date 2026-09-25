@@ -19,6 +19,24 @@ const displayPriceToCents = (price) => {
   return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
 };
 
+const serviceImageOverrides = [
+  [/deep tissue/i, "/images/massage.jpg"],
+  [/relaxation massage/i, "/images/bodyMassage.jpg"],
+  [/lavender relax pedicure/i, "/images/footCare.jpg"],
+  [/basic manicure/i, "/images/manicure.jpg"],
+  [/builder gel manicure/i, "/images/manicure-hard-gel-fill-generated.png"],
+  [/foot reflexology/i, "/images/foot.jpg"],
+  [/basic pedicure/i, "/images/footCare.jpg"],
+  [/hydrating pedicure/i, "/images/facial.jpg"],
+  [/aromatherapy pedicure/i, "/images/cupping.png"],
+  [/hot stone.*pedicure/i, "/images/massage.jpg"],
+  [/lavender luxe pedicure/i, "/images/head.jpg"],
+  [/hard gel fill[- ]?in/i, "/images/manicure-hard-gel-fill-generated.png"],
+];
+
+const normalizeVariationLabel = (name = "") =>
+  String(name).replace(/^(\d+)\s*(?:mins?|minutes?)$/i, "$1 min");
+
 const normalizeService = (service) => {
   const duration = Number(service.duration || 0);
   const price = normalizePrice(service.price);
@@ -35,14 +53,29 @@ const normalizeService = (service) => {
     }];
   }
 
+  variations = variations.map((variation) => ({
+    ...variation,
+    name: normalizeVariationLabel(variation.name),
+  }));
+
+  const imageOverride = serviceImageOverrides.find(([pattern]) => pattern.test(service.name || ""));
+  let description = service.description || "";
+  description = description.replace(/([.!?])(?=[\u3400-\u9fff])/g, "$1 ");
+  if (/hard gel fill[- ]?in/i.test(service.name || "") && (!description || /^hard gel fill[- ]?in(?: service)?$/i.test(description.trim()))) {
+    description = "Refresh existing hard gel growth with careful shaping, rebalancing, and a smooth finished color.";
+  }
+  if (/classic head spa\s*-?\s*for two/i.test(service.name || "") && !description.trim()) {
+    description = "Enjoy the Classic Head Spa side by side, with scalp care, cleansing, massage, and restorative relaxation for two guests.";
+  }
+
   return {
     id: service.id,
     name: service.name || "",
     category: service.category || "",
-    description: service.description || "",
+    description,
     duration,
     price,
-    image: service.image || "",
+    image: imageOverride?.[1] || service.image || "",
     variations,
     isAddOn,
     isActive: service.isActive !== false,

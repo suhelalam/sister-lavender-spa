@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import AppointmentSummary from '../components/AppointmentSummary';
 import { useCart } from '../context/CartContext';
+import Link from 'next/link';
 
 const BUSINESS_TIME_ZONE = 'America/Chicago';
 
@@ -200,6 +201,9 @@ export default function SelectTimePage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      <Link href="/booking" className="mb-4 inline-flex text-sm font-semibold text-purple-700 hover:underline">
+        &larr; Back to services
+      </Link>
       <h1 className="text-2xl font-semibold mb-4 text-purple-700">Select a Time Slot</h1>
 
       <div className="flex flex-col lg:flex-row gap-6">

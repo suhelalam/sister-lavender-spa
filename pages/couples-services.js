@@ -5,15 +5,73 @@ import Link from 'next/link';
 import { ArrowRight, Heart, Sparkles } from 'lucide-react';
 import ServiceCard from '../components/ServiceCard';
 import { useServices } from '../context/ServicesContext';
+import { useMemo } from 'react';
 
 const normalizeCategory = (value = '') => String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
 const couplesCategories = new Set(['Side-by-Side Services', 'Couples Services'].map(normalizeCategory));
 
 export default function CouplesServices() {
   const { activeServices: services, loading } = useServices();
-  const couplesServices = services.filter((service) =>
+  const couplesServices = useMemo(() => services.filter((service) =>
     !service.isAddOn && couplesCategories.has(normalizeCategory(service.category))
-  );
+  ).map((service) => {
+    const serviceName = String(service.name || '');
+    if (/classic head spa.*for two/i.test(serviceName)) {
+      const individualClassic = services.find((candidate) =>
+        !couplesCategories.has(normalizeCategory(candidate.category)) &&
+        /classic.*head spa/i.test(String(candidate.name || ''))
+      );
+      const classicDuration = individualClassic?.variations?.[0]?.duration || 60 * 60000;
+      const variations = service.variations?.length
+        ? service.variations.map((variation) => ({
+            ...variation,
+            duration: Number(variation.duration) > 0 ? variation.duration : classicDuration,
+          }))
+        : [{
+            id: `${service.id}-standard`,
+            name: '60 min',
+            duration: classicDuration,
+            price: Math.round(Number.parseFloat(String(service.price || '0').replace(/[^\d.]/g, '')) * 100),
+            currency: 'USD',
+            version: 1,
+          }];
+      return { ...service, duration: Math.round(classicDuration / 60000), variations };
+    }
+    if (!/(deep tissue|relaxation massage).*for two/i.test(serviceName)) return service;
+
+    const treatmentName = /deep tissue/i.test(serviceName) ? 'deep tissue' : 'relaxation massage';
+    const individual = services.find((candidate) =>
+      !couplesCategories.has(normalizeCategory(candidate.category)) &&
+      String(candidate.name || '').toLowerCase().includes(treatmentName)
+    );
+    const individual120 = individual?.variations?.find((variation) =>
+      Math.round(Number(variation.duration || 0) / 60000) === 120
+    );
+    const alreadyHas120 = service.variations?.some((variation) =>
+      Math.round(Number(variation.duration || 0) / 60000) === 120
+    );
+    if (!individual120 || alreadyHas120) return service;
+
+    const individual60 = individual?.variations?.find((variation) =>
+      Math.round(Number(variation.duration || 0) / 60000) === 60
+    );
+    const couples60 = service.variations?.find((variation) =>
+      Math.round(Number(variation.duration || 0) / 60000) === 60
+    );
+    const pairMultiplier = individual60?.price && couples60?.price
+      ? Number(couples60.price) / Number(individual60.price)
+      : 2;
+
+    return {
+      ...service,
+      variations: [...service.variations, {
+        ...individual120,
+        id: `${service.id}-120-min`,
+        name: '120 min',
+        price: Math.round(Number(individual120.price) * pairMultiplier),
+      }],
+    };
+  }), [services]);
 
   return <main>
     <section className="grid min-h-[540px] bg-[#f0ebe4] md:grid-cols-2">
