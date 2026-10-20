@@ -25,9 +25,18 @@ export default function AdminSettingsPage() {
   const [promotion, setPromotion] = useState(defaultHomeSettings.promotion);
   const [timeBlocks, setTimeBlocks] = useState([]);
   const [blockForm, setBlockForm] = useState(emptyBlock);
+  const [serviceSearch, setServiceSearch] = useState("");
   const { services } = useServices();
   const bookableServices = services.filter((service) => !service.isAddOn && service.isActive !== false);
   const serviceCategories = [...new Set(bookableServices.map((service) => service.category).filter(Boolean))].sort();
+  const normalizedServiceSearch = serviceSearch.trim().toLowerCase();
+  const filteredBookableServices = normalizedServiceSearch
+    ? bookableServices.filter((service) =>
+        `${service.name || ""} ${service.category || ""}`
+          .toLowerCase()
+          .includes(normalizedServiceSearch)
+      )
+    : bookableServices;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -141,6 +150,7 @@ export default function AdminSettingsPage() {
       },
     ].sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`)));
     setBlockForm(emptyBlock());
+    setServiceSearch("");
   };
 
   const serviceNamesForBlock = (block) =>
@@ -235,13 +245,42 @@ export default function AdminSettingsPage() {
             {blockForm.scope === "services" && (
               <fieldset className="mt-4 rounded-lg border border-gray-200 bg-white p-3">
                 <legend className="px-1 text-sm font-semibold">Choose services</legend>
+                <div className="relative mt-2">
+                  <label htmlFor="blocked-service-search" className="sr-only">Search services by name or category</label>
+                  <input
+                    id="blocked-service-search"
+                    type="search"
+                    className="field pr-20"
+                    placeholder="Search by service name or category…"
+                    value={serviceSearch}
+                    onChange={(event) => setServiceSearch(event.target.value)}
+                  />
+                  {serviceSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setServiceSearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-purple-700 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-gray-500" aria-live="polite">
+                  {filteredBookableServices.length} {filteredBookableServices.length === 1 ? "service" : "services"} found
+                  {blockForm.serviceIds.length > 0 ? ` · ${blockForm.serviceIds.length} selected` : ""}
+                </p>
                 <div className="mt-1 grid max-h-52 gap-2 overflow-y-auto sm:grid-cols-2">
-                  {bookableServices.map((service) => (
+                  {filteredBookableServices.map((service) => (
                     <label key={service.id} className="flex items-start gap-2 rounded p-2 text-sm hover:bg-gray-50">
                       <input type="checkbox" className="mt-1" checked={blockForm.serviceIds.includes(service.id)} onChange={() => toggleBlockService(service.id)} />
                       <span><span className="font-medium">{service.name}</span><span className="block text-xs text-gray-500">{service.category}</span></span>
                     </label>
                   ))}
+                  {filteredBookableServices.length === 0 && (
+                    <p className="col-span-full py-5 text-center text-sm text-gray-500">
+                      No services match “{serviceSearch.trim()}”.
+                    </p>
+                  )}
                 </div>
               </fieldset>
             )}
