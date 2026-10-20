@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import crypto from 'crypto';
 import { adminDb, isAdminConfigured } from '../../lib/firebaseAdmin';
 import { upsertCustomer } from '../../lib/crm';
+import { findBlockingRule, sanitizeTimeBlocks } from '../../lib/timeBlocks';
 
 function hashCancelToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -563,6 +564,34 @@ Note: ${note || 'None'}
   }
 
   try {
+    if (adminDb) {
+      const settingsSnapshot = await adminDb.doc('settings/homepage').get();
+      const rawBlocks = settingsSnapshot.data()?.timeBlocksJson;
+      const timeBlocks = sanitizeTimeBlocks(
+        typeof rawBlocks === 'string' ? JSON.parse(rawBlocks || '[]') : rawBlocks
+      );
+      const durationMinutes = Math.max(
+        1,
+        ...normalizedServices
+          .filter((service) => !service.isAddOn)
+          .map((service) => service.durationMinutes || 0)
+      );
+      const blockingRule = findBlockingRule({
+        startAt,
+        durationMinutes,
+        serviceIds: normalizedServices.flatMap((service) =>
+          [service.serviceId, service.serviceVariationId].filter(Boolean)
+        ),
+        serviceCategories: normalizedServices.map((service) => service.category).filter(Boolean),
+      }, timeBlocks);
+
+      if (blockingRule) {
+        return res.status(409).json({
+          error: 'That time is no longer available for one or more selected services. Please choose another time.',
+        });
+      }
+    }
+
     let crmCustomer = null;
     if (isAdminConfigured) {
       crmCustomer = await upsertCustomer(adminDb, {

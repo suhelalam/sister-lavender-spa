@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { fromZonedTime } from "date-fns-tz";
 import { defaultBusinessHours } from "../../lib/homeSettings";
+import { findBlockingRule, sanitizeTimeBlocks } from "../../lib/timeBlocks";
 
 const FIRESTORE_DOC_PATH = "settings/homepage";
 const FIRESTORE_DB = "(default)";
@@ -54,27 +55,30 @@ function sanitizeBusinessHours(input) {
   }));
 }
 
-function parseBusinessHoursDoc(document) {
+function parseSettingsDoc(document) {
   try {
-    const json = document?.fields?.businessHoursJson?.stringValue || "[]";
-    return sanitizeBusinessHours(JSON.parse(json));
+    const fields = document?.fields || {};
+    return {
+      businessHours: sanitizeBusinessHours(JSON.parse(fields.businessHoursJson?.stringValue || "[]")),
+      timeBlocks: sanitizeTimeBlocks(JSON.parse(fields.timeBlocksJson?.stringValue || "[]")),
+    };
   } catch {
-    return defaultBusinessHours;
+    return { businessHours: defaultBusinessHours, timeBlocks: [] };
   }
 }
 
-async function loadBusinessHours() {
+async function loadBookingSettings() {
   const firestore = getFirestoreClient();
   const name = getSettingsDocName();
-  if (!firestore || !name) return defaultBusinessHours;
+  if (!firestore || !name) return { businessHours: defaultBusinessHours, timeBlocks: [] };
 
   try {
     const response = await firestore.projects.databases.documents.get({ name });
-    return parseBusinessHoursDoc(response.data);
+    return parseSettingsDoc(response.data);
   } catch (error) {
-    if (error?.code === 404 || error?.status === 404) return defaultBusinessHours;
+    if (error?.code === 404 || error?.status === 404) return { businessHours: defaultBusinessHours, timeBlocks: [] };
     console.error("Failed to load business hours for availability:", error);
-    return defaultBusinessHours;
+    return { businessHours: defaultBusinessHours, timeBlocks: [] };
   }
 }
 
@@ -199,8 +203,14 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, availabilities: [] });
     }
 
-    const businessHours = await loadBusinessHours();
-    const slots = generateTimeSlots(startDate, businessHours);
+    const { businessHours, timeBlocks } = await loadBookingSettings();
+    const serviceIds = Array.isArray(req.body?.serviceIds) ? req.body.serviceIds : [];
+    const serviceCategories = Array.isArray(req.body?.serviceCategories)
+      ? req.body.serviceCategories
+      : [];
+    const slots = generateTimeSlots(startDate, businessHours).filter((slot) =>
+      !findBlockingRule({ ...slot, serviceIds, serviceCategories }, timeBlocks)
+    );
     res.status(200).json({ success: true, availabilities: slots });
 
   } catch (err) {

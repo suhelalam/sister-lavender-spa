@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { defaultHomeSettings } from "../../../lib/homeSettings";
+import { sanitizeTimeBlocks } from "../../../lib/timeBlocks";
 
 const FIRESTORE_DOC_PATH = "settings/homepage";
 const FIRESTORE_DB = "(default)";
@@ -109,6 +110,7 @@ function toFirestoreDocument(settings) {
       businessHoursJson: { stringValue: JSON.stringify(settings.businessHours) },
       announcementsJson: { stringValue: JSON.stringify(settings.announcements) },
       promotionJson: { stringValue: JSON.stringify(settings.promotion) },
+      timeBlocksJson: { stringValue: JSON.stringify(settings.timeBlocks) },
       updatedAt: { timestampValue: new Date().toISOString() },
     },
   };
@@ -124,7 +126,8 @@ function fromFirestoreDocument(document) {
       JSON.parse(fields.announcementsJson?.stringValue || "[]")
     );
     const promotion = sanitizePromotion(JSON.parse(fields.promotionJson?.stringValue || "{}"));
-    return { businessHours, announcements, promotion };
+    const timeBlocks = sanitizeTimeBlocks(JSON.parse(fields.timeBlocksJson?.stringValue || "[]"));
+    return { businessHours, announcements, promotion, timeBlocks };
   } catch {
     return defaultHomeSettings;
   }
@@ -155,11 +158,12 @@ export default async function handler(req, res) {
       const businessHours = sanitizeBusinessHours(req.body?.businessHours);
       const announcements = sanitizeAnnouncements(req.body?.announcements);
       const promotion = sanitizePromotion(req.body?.promotion);
+      const timeBlocks = sanitizeTimeBlocks(req.body?.timeBlocks);
 
       try {
         await firestore.projects.databases.documents.patch({
           name,
-          requestBody: toFirestoreDocument({ businessHours, announcements, promotion }),
+          requestBody: toFirestoreDocument({ businessHours, announcements, promotion, timeBlocks }),
         });
       } catch (error) {
         if (!(error?.code === 404 || error?.status === 404)) throw error;
@@ -170,13 +174,13 @@ export default async function handler(req, res) {
           parent: `projects/${projectId}/databases/${FIRESTORE_DB}/documents`,
           collectionId: "settings",
           documentId: "homepage",
-          requestBody: toFirestoreDocument({ businessHours, announcements, promotion }),
+          requestBody: toFirestoreDocument({ businessHours, announcements, promotion, timeBlocks }),
         });
       }
 
       return res.status(200).json({
         success: true,
-        settings: { businessHours, announcements, promotion },
+        settings: { businessHours, announcements, promotion, timeBlocks },
       });
     }
 

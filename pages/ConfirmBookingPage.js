@@ -174,6 +174,7 @@ export default function ConfirmBookingPage() {
             phoneNumber: formatPhoneToE164(phone),
             },
             services: items.map((item) => ({
+              serviceId: item.serviceId,
               serviceVariationId: item.id,
               serviceName: item.name,
               serviceVariationVersion: item.version,

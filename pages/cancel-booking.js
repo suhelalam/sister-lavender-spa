@@ -157,10 +157,19 @@ export default function CancelBookingPage() {
       setLoadingAvailability(true);
       setSelectedSlot(null);
       try {
+        const bookedServices = Array.isArray(bookingDetails?.services) ? bookingDetails.services : [];
+        const durationMinutes = Math.max(30, ...bookedServices.map((service) => Number(service?.durationMinutes) || 0));
         const res = await fetch('/api/get-availability', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ startDate: selectedDate }),
+          body: JSON.stringify({
+            startDate: selectedDate,
+            durationMinutes,
+            serviceIds: bookedServices.flatMap((service) =>
+              [service?.serviceId, service?.serviceVariationId].filter(Boolean)
+            ),
+            serviceCategories: bookedServices.map((service) => service?.category).filter(Boolean),
+          }),
         });
         const data = await res.json();
         if (!res.ok || !data?.success) {

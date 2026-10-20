@@ -149,6 +149,8 @@ export default function SelectTimePage() {
           signal: controller.signal,
           body: JSON.stringify({
             serviceVariationId: services[0].id,
+            serviceIds: selectedServices.map((service) => service.serviceId).filter(Boolean),
+            serviceCategories: selectedServices.map((service) => service.category).filter(Boolean),
             startDate: formatDate(selectedDate),
             durationMinutes,
           }),

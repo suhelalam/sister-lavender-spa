@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 import { adminDb, isAdminConfigured } from '../../lib/firebaseAdmin';
+import { findBlockingRule, sanitizeTimeBlocks } from '../../lib/timeBlocks';
 
 function hashCancelToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -210,6 +211,28 @@ export default async function handler(req, res) {
       }
 
       const durationMinutes = getBookingDurationMinutes(booking?.services);
+      const settingsSnapshot = await adminDb.doc('settings/homepage').get();
+      const rawBlocks = settingsSnapshot.data()?.timeBlocksJson;
+      const timeBlocks = sanitizeTimeBlocks(
+        typeof rawBlocks === 'string' ? JSON.parse(rawBlocks || '[]') : rawBlocks
+      );
+      const blockingRule = findBlockingRule({
+        startAt: newStartAt,
+        durationMinutes,
+        serviceIds: Array.isArray(booking?.services)
+          ? booking.services.flatMap((service) =>
+              [service?.serviceId, service?.serviceVariationId].filter(Boolean)
+            )
+          : [],
+        serviceCategories: Array.isArray(booking?.services)
+          ? booking.services.map((service) => service?.category).filter(Boolean)
+          : [],
+      }, timeBlocks);
+      if (blockingRule) {
+        return res.status(409).json({
+          error: 'That time is no longer available for one or more services in this appointment.',
+        });
+      }
       await updateCalendarEventTime(
         booking.calendarEventId || bookingId,
         newStartAt,
