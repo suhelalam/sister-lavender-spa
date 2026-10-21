@@ -32,6 +32,13 @@ function localDateFromKey(dateKey) {
   return new Date(year, month - 1, day, 0, 0, 0, 0);
 }
 
+function dateKeyFromLocalDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getAppointmentDurationMinutes(items) {
   const longestServiceDurationMs = items.reduce(
     (longest, item) => Math.max(longest, Number(item?.duration) || 0),
@@ -45,21 +52,15 @@ export default function SelectTimePage() {
   const { items: cartItems, isClient } = useCart();
   const [services, setServices] = useState([]);
   const [availability, setAvailability] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(() => localDateFromKey(getBusinessDateKey()));
+  const [todayKey, setTodayKey] = useState(null);
+  const [selectedDateKey, setSelectedDateKey] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const appointmentSummaryRef = useRef(null);
 
-  const todayKey = getBusinessDateKey();
-  const today = localDateFromKey(todayKey);
-  const formatDate = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  const today = todayKey ? localDateFromKey(todayKey) : null;
   const formatAccessibleDate = (date) =>
     date.toLocaleDateString('en-US', {
       weekday: 'long',
@@ -76,6 +77,7 @@ export default function SelectTimePage() {
   };
 
   const getWeekDates = (offset) => {
+    if (!today) return [];
     const base = getStartOfWeek(today);
     base.setDate(base.getDate() + offset * 7);
     return Array.from({ length: 7 }, (_, i) => {
@@ -87,14 +89,38 @@ export default function SelectTimePage() {
 
   const weekDates = getWeekDates(weekOffset);
 
-  // This page is statically generated, so its initial state can contain the
-  // date from build time. Re-read the Chicago date after hydration before the
-  // services effect can trigger the first availability request.
+  // The page may be statically generated or restored from the browser's
+  // back-forward cache. Establish the date only in the browser, then clamp a
+  // stale selection whenever the page becomes active again.
   useEffect(() => {
     if (!isClient) return;
 
-    setSelectedDate(localDateFromKey(getBusinessDateKey()));
-    setWeekOffset(0);
+    const syncBusinessDate = () => {
+      const currentDateKey = getBusinessDateKey();
+      setTodayKey(currentDateKey);
+      setSelectedDateKey((previousDateKey) => {
+        if (!previousDateKey || previousDateKey < currentDateKey) {
+          setWeekOffset(0);
+          return currentDateKey;
+        }
+        return previousDateKey;
+      });
+    };
+
+    const syncWhenVisible = () => {
+      if (document.visibilityState === 'visible') syncBusinessDate();
+    };
+
+    syncBusinessDate();
+    window.addEventListener('pageshow', syncBusinessDate);
+    window.addEventListener('focus', syncBusinessDate);
+    document.addEventListener('visibilitychange', syncWhenVisible);
+
+    return () => {
+      window.removeEventListener('pageshow', syncBusinessDate);
+      window.removeEventListener('focus', syncBusinessDate);
+      document.removeEventListener('visibilitychange', syncWhenVisible);
+    };
   }, [isClient]);
 
   useEffect(() => {
@@ -126,7 +152,7 @@ export default function SelectTimePage() {
   }, [cartItems, isClient]);
 
   useEffect(() => {
-    if (!isClient || !services.length) return;
+    if (!isClient || !services.length || !selectedDateKey) return;
 
     const selectedServices = isClient && cartItems.length > 0 ? cartItems : services;
     const durationMinutes = getAppointmentDurationMinutes(selectedServices);
@@ -151,7 +177,7 @@ export default function SelectTimePage() {
             serviceVariationId: services[0].id,
             serviceIds: selectedServices.map((service) => service.serviceId).filter(Boolean),
             serviceCategories: selectedServices.map((service) => service.category).filter(Boolean),
-            startDate: formatDate(selectedDate),
+            startDate: selectedDateKey,
             durationMinutes,
           }),
         });
@@ -176,7 +202,7 @@ export default function SelectTimePage() {
 
     fetchAvailability();
     return () => controller.abort();
-  }, [cartItems, isClient, selectedDate, services]);
+  }, [cartItems, isClient, selectedDateKey, services]);
 
   const handleSlotSelect = (slot) => {
     setSelectedSlot(slot);
@@ -191,14 +217,14 @@ export default function SelectTimePage() {
     if (weekOffset > 0) {
       const nextOffset = weekOffset - 1;
       setWeekOffset(nextOffset);
-      setSelectedDate(nextOffset === 0 ? today : getWeekDates(nextOffset)[0]);
+      setSelectedDateKey(dateKeyFromLocalDate(nextOffset === 0 ? today : getWeekDates(nextOffset)[0]));
     }
   };
 
   const goToNextWeek = () => {
     const nextOffset = weekOffset + 1;
     setWeekOffset(nextOffset);
-    setSelectedDate(getWeekDates(nextOffset)[0]);
+    setSelectedDateKey(dateKeyFromLocalDate(getWeekDates(nextOffset)[0]));
   };
 
   return (
@@ -225,10 +251,12 @@ export default function SelectTimePage() {
               &larr; Prev
             </button>
             <div className="text-lg font-medium text-gray-700">
-              {weekDates[0].toLocaleString('default', {
-                month: 'long',
-                year: 'numeric',
-              })}
+              {weekDates[0]
+                ? weekDates[0].toLocaleString('default', {
+                    month: 'long',
+                    year: 'numeric',
+                  })
+                : 'Loading calendar...'}
             </div>
             <button
               onClick={goToNextWeek}
@@ -248,16 +276,16 @@ export default function SelectTimePage() {
           {/* Day Buttons */}
           <div className="grid grid-cols-7 gap-1 mb-4">
             {weekDates.map((date) => {
-              const dateKey = formatDate(date);
+              const dateKey = dateKeyFromLocalDate(date);
               const isPast = dateKey < todayKey;
-              const isSelected = dateKey === formatDate(selectedDate);
+              const isSelected = dateKey === selectedDateKey;
 
               return (
                 <button
                   type="button"
                   key={dateKey}
                   disabled={isPast}
-                  onClick={() => setSelectedDate(date)}
+                  onClick={() => setSelectedDateKey(dateKey)}
                   aria-pressed={isSelected}
                   aria-label={`${formatAccessibleDate(date)}${isSelected ? ', selected' : ''}`}
                   title={formatAccessibleDate(date)}
